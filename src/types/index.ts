@@ -15,6 +15,11 @@ export type ItemLocacaoInsert = Database["public"]["Tables"]["itens_locacao"]["I
 export type DiaNaoCobrado = Database["public"]["Tables"]["dias_nao_cobrados"]["Row"];
 export type DiaNaoCobradoInsert = Database["public"]["Tables"]["dias_nao_cobrados"]["Insert"];
 
+export type Perfil = Database["public"]["Tables"]["perfis"]["Row"];
+export type UserRole = Database["public"]["Tables"]["user_roles"]["Row"];
+
+export type AppRole = "admin" | "cliente";
+
 export type SituacaoLocacao = "ativo" | "finalizado" | "cancelado" | "atrasado" | "alerta";
 
 export interface ItemLocacaoForm {
