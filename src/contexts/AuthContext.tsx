@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   perfil: Perfil | null;
   role: AppRole | null;
+  locadoraId: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   perfil: null,
   role: null,
+  locadoraId: null,
   loading: true,
   signOut: async () => {},
 });
@@ -30,21 +32,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [locadoraId, setLocadoraId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth listener BEFORE getSession
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // Defer profile/role fetch to avoid deadlock
           setTimeout(() => fetchUserData(session.user.id), 0);
         } else {
           setPerfil(null);
           setRole(null);
+          setLocadoraId(null);
           setLoading(false);
         }
       }
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setPerfil(perfilRes.data);
       setRole((roleRes.data?.role as AppRole) ?? null);
+      setLocadoraId(perfilRes.data?.locadora_id ?? null);
     } catch {
       // If no role found, user has no role yet
     } finally {
@@ -85,10 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setPerfil(null);
     setRole(null);
+    setLocadoraId(null);
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, perfil, role, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, perfil, role, locadoraId, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
