@@ -3,25 +3,31 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard,
-  Users,
   Package,
-  FileText,
-  Calendar,
+  Users,
   Plus,
+  FileText,
+  ArrowDownToLine,
+  DollarSign,
+  CalendarOff,
+  BarChart3,
+  HardDrive,
+  Settings,
   LogOut,
-  UserCog,
-  Building2,
 } from "lucide-react";
 
 const adminLinks = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/locacoes/nova", label: "Nova Locação", icon: Plus },
-  { to: "/locacoes", label: "Locações", icon: FileText },
+  { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/clientes", label: "Clientes", icon: Users },
-  { to: "/equipamentos", label: "Equipamentos", icon: Package },
-  { to: "/feriados", label: "Feriados", icon: Calendar },
-  { to: "/perfil-empresa", label: "Perfil Empresa", icon: Building2 },
-  { to: "/usuarios", label: "Usuários", icon: UserCog },
+  { to: "/novo-aluguel", label: "Novo Aluguel", icon: Plus },
+  { to: "/alugueis", label: "Aluguéis", icon: FileText },
+  { to: "/devolucao", label: "Devolução", icon: ArrowDownToLine },
+  { to: "/financeiro", label: "Financeiro", icon: DollarSign },
+  { to: "/dias-nao-cobrados", label: "Dias Não Cobrados", icon: CalendarOff },
+  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { to: "/backup", label: "Backup", icon: HardDrive },
+  { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -36,10 +42,10 @@ export default function Sidebar() {
         </div>
         <div>
           <span className="text-lg font-bold tracking-tight text-foreground">MGM Sistemas</span>
-          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">Painel Administrativo</p>
+          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">Gestão de Locações</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-1 overflow-auto p-4">
         {adminLinks.map((link) => {
           const active = location.pathname === link.to;
           return (
