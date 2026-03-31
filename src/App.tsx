@@ -12,6 +12,8 @@ import Equipamentos from "./pages/Equipamentos.tsx";
 import Locacoes from "./pages/Locacoes.tsx";
 import NovaLocacao from "./pages/NovaLocacao.tsx";
 import Contrato from "./pages/Contrato.tsx";
+import EditarLocacao from "./pages/EditarLocacao.tsx";
+import PerfilEmpresa from "./pages/PerfilEmpresa.tsx";
 import Feriados from "./pages/Feriados.tsx";
 import Usuarios from "./pages/Usuarios.tsx";
 import MeusAlugueis from "./pages/MeusAlugueis.tsx";
@@ -46,6 +48,8 @@ const App = () => (
             <Route path="/equipamentos" element={<ProtectedRoute allowedRoles={["admin"]}><Equipamentos /></ProtectedRoute>} />
             <Route path="/locacoes" element={<ProtectedRoute allowedRoles={["admin"]}><Locacoes /></ProtectedRoute>} />
             <Route path="/locacoes/nova" element={<ProtectedRoute allowedRoles={["admin"]}><NovaLocacao /></ProtectedRoute>} />
+            <Route path="/locacoes/:id/editar" element={<ProtectedRoute allowedRoles={["admin"]}><EditarLocacao /></ProtectedRoute>} />
+            <Route path="/perfil-empresa" element={<ProtectedRoute allowedRoles={["admin"]}><PerfilEmpresa /></ProtectedRoute>} />
             <Route path="/feriados" element={<ProtectedRoute allowedRoles={["admin"]}><Feriados /></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute allowedRoles={["admin"]}><Usuarios /></ProtectedRoute>} />
 
