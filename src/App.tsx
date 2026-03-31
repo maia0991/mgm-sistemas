@@ -12,6 +12,8 @@ import Equipamentos from "./pages/Equipamentos.tsx";
 import Locacoes from "./pages/Locacoes.tsx";
 import NovaLocacao from "./pages/NovaLocacao.tsx";
 import Contrato from "./pages/Contrato.tsx";
+import EditarLocacao from "./pages/EditarLocacao.tsx";
+import PerfilEmpresa from "./pages/PerfilEmpresa.tsx";
 import Feriados from "./pages/Feriados.tsx";
 import Usuarios from "./pages/Usuarios.tsx";
 import MeusAlugueis from "./pages/MeusAlugueis.tsx";
