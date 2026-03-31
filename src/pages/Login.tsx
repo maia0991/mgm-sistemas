@@ -130,8 +130,8 @@ export default function LoginPage({ adminMode: initialAdminMode = false }: Login
             {mode === "forgot"
               ? "Recuperar senha"
               : adminMode
-                ? "Acesso Administrativo"
-                : "Portal do Cliente"}
+                ? "Acesso Master MGM"
+                : "Acesso da Locadora"}
           </p>
           {adminMode && (
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
