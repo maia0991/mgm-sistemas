@@ -36,7 +36,7 @@ export default function EditarLocacaoPage() {
       supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
     ]).then(([l, e, f]) => {
       const loc = l.data as LocacaoComCliente;
-      if (!loc) { navigate("/locacoes"); return; }
+      if (!loc) { navigate("/alugueis"); return; }
       setLocacao(loc);
       setDataInicio(loc.data_inicio);
       setDataPrevisao(loc.data_previsao_entrega);
