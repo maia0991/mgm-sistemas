@@ -36,7 +36,7 @@ export default function EditarLocacaoPage() {
       supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
     ]).then(([l, e, f]) => {
       const loc = l.data as LocacaoComCliente;
-      if (!loc) { navigate("/locacoes"); return; }
+      if (!loc) { navigate("/alugueis"); return; }
       setLocacao(loc);
       setDataInicio(loc.data_inicio);
       setDataPrevisao(loc.data_previsao_entrega);
@@ -141,7 +141,7 @@ export default function EditarLocacaoPage() {
       }
 
       toast.success("Locação atualizada!");
-      navigate("/locacoes");
+      navigate("/alugueis");
     } catch (err) {
       toast.error("Erro ao salvar");
       console.error(err);
@@ -223,7 +223,7 @@ export default function EditarLocacaoPage() {
         </div>
 
         <div className="flex gap-4">
-          <Button variant="outline" className="flex-1 rounded-[30px] h-12" onClick={() => navigate("/locacoes")}>Cancelar</Button>
+          <Button variant="outline" className="flex-1 rounded-[30px] h-12" onClick={() => navigate("/alugueis")}>Cancelar</Button>
           <Button className="flex-1 rounded-[30px] h-12 text-base" onClick={handleSave} disabled={saving}>
             {saving ? "Salvando..." : "Salvar Alterações"}
           </Button>

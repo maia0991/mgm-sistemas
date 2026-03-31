@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { LocacaoComCliente, DiaNaoCobrado } from "@/types";
 import { formatCurrency, formatDate, situacaoLabel, situacaoColor, calcularDiasCobrados, calcularValorTotal } from "@/lib/calculos";
@@ -10,14 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Search, CheckCircle, Printer, Pencil, XCircle } from "lucide-react";
+import { Search, CheckCircle } from "lucide-react";
 
-export default function LocacoesPage() {
+export default function DevolucaoPage() {
   const [locacoes, setLocacoes] = useState<LocacaoComCliente[]>([]);
   const [feriados, setFeriados] = useState<DiaNaoCobrado[]>([]);
   const [search, setSearch] = useState("");
   const [baixaOpen, setBaixaOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
   const [selectedLocacao, setSelectedLocacao] = useState<LocacaoComCliente | null>(null);
   const [dataDevolucao, setDataDevolucao] = useState("");
   const [valorAvaria, setValorAvaria] = useState(0);
@@ -26,7 +24,7 @@ export default function LocacoesPage() {
 
   async function fetchData() {
     const [l, f] = await Promise.all([
-      supabase.from("locacoes").select("*, clientes(*), itens_locacao(*)").order("created_at", { ascending: false }),
+      supabase.from("locacoes").select("*, clientes(*), itens_locacao(*)").eq("situacao", "ativo").order("data_previsao_entrega", { ascending: true }),
       supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
     ]);
     setLocacoes((l.data as LocacaoComCliente[]) || []);
@@ -40,7 +38,6 @@ export default function LocacoesPage() {
     setBaixaOpen(true);
   }
 
-  // Calculate preview values for baixa modal
   const baixaPreview = (() => {
     if (!selectedLocacao || !dataDevolucao) return null;
     const diasReais = calcularDiasCobrados(
@@ -79,27 +76,8 @@ export default function LocacoesPage() {
       }
     }
 
-    toast.success("Locação finalizada!");
+    toast.success("Devolução registrada com sucesso!");
     setBaixaOpen(false);
-    fetchData();
-  }
-
-  async function handleCancel() {
-    if (!selectedLocacao) return;
-
-    // Return stock
-    for (const item of selectedLocacao.itens_locacao) {
-      const { data: eq } = await supabase.from("equipamentos").select("quantidade_disponivel").eq("id", item.equipamento_id).single();
-      if (eq) {
-        await supabase.from("equipamentos").update({
-          quantidade_disponivel: eq.quantidade_disponivel + item.quantidade_locada,
-        }).eq("id", item.equipamento_id);
-      }
-    }
-
-    await supabase.from("locacoes").update({ situacao: "cancelado" }).eq("id", selectedLocacao.id);
-    toast.success("Locação cancelada!");
-    setCancelOpen(false);
     fetchData();
   }
 
@@ -111,12 +89,9 @@ export default function LocacoesPage() {
   return (
     <Layout>
       <div className="animate-fade-in space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Locações</h1>
-            <p className="text-muted-foreground">Gerencie todas as locações</p>
-          </div>
-          <Link to="/novo-aluguel"><Button className="rounded-[30px] gap-2">Novo Aluguel</Button></Link>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Devolução</h1>
+          <p className="text-muted-foreground">Dê baixa nos aluguéis ativos</p>
         </div>
 
         <div className="relative">
@@ -139,34 +114,18 @@ export default function LocacoesPage() {
                     {Number(l.valor_total_pago) > 0 && <span className="text-success"> (Entrada: {formatCurrency(Number(l.valor_total_pago))})</span>}
                   </p>
                 </div>
-                <div className="flex gap-1">
-                  <Link to={`/locacoes/${l.id}/contrato`}>
-                    <Button variant="ghost" size="icon" className="rounded-full"><Printer className="h-4 w-4" /></Button>
-                  </Link>
-                  {l.situacao === "ativo" && (
-                    <>
-                      <Link to={`/alugueis/${l.id}/editar`}>
-                        <Button variant="ghost" size="icon" className="rounded-full"><Pencil className="h-4 w-4" /></Button>
-                      </Link>
-                      <Button variant="ghost" size="icon" className="rounded-full text-success" onClick={() => openBaixa(l)}>
-                        <CheckCircle className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="rounded-full text-destructive" onClick={() => { setSelectedLocacao(l); setCancelOpen(true); }}>
-                        <XCircle className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
+                <Button className="rounded-[30px] gap-2" onClick={() => openBaixa(l)}>
+                  <CheckCircle className="h-4 w-4" /> Dar Baixa
+                </Button>
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhuma locação encontrada.</p>}
+          {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum aluguel ativo para devolução.</p>}
         </div>
 
-        {/* Modal de Baixa */}
         <Dialog open={baixaOpen} onOpenChange={setBaixaOpen}>
           <DialogContent className="rounded-[30px] border-border bg-card sm:max-w-md">
-            <DialogHeader><DialogTitle className="text-foreground">Dar Baixa na Locação #{selectedLocacao?.numero_contrato}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="text-foreground">Devolução - Contrato #{selectedLocacao?.numero_contrato}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
               <div><Label className="text-foreground">Data Real de Devolução</Label><Input className="rounded-[30px]" type="date" value={dataDevolucao} onChange={(e) => setDataDevolucao(e.target.value)} /></div>
@@ -174,7 +133,7 @@ export default function LocacoesPage() {
 
               {baixaPreview && (
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
-                  <p className="font-semibold text-foreground">Resumo da Baixa:</p>
+                  <p className="font-semibold text-foreground">Resumo da Devolução:</p>
                   <div className="grid grid-cols-2 gap-1">
                     <p className="text-muted-foreground">Dias cobrados:</p><p className="text-right font-bold text-foreground">{baixaPreview.diasReais}</p>
                     <p className="text-muted-foreground">Valor calculado:</p><p className="text-right font-bold text-foreground">{formatCurrency(baixaPreview.valorCalculado)}</p>
@@ -187,24 +146,7 @@ export default function LocacoesPage() {
                 </div>
               )}
 
-              <Button className="w-full rounded-[30px]" onClick={handleBaixa}>Finalizar Locação</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Cancelamento */}
-        <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-          <DialogContent className="rounded-[30px] border-border bg-card sm:max-w-md">
-            <DialogHeader><DialogTitle className="text-foreground">Cancelar Locação #{selectedLocacao?.numero_contrato}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Tem certeza que deseja cancelar esta locação? Os equipamentos serão devolvidos ao estoque.
-              </p>
-              <p className="text-sm text-foreground font-medium">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1 rounded-[30px]" onClick={() => setCancelOpen(false)}>Não, manter</Button>
-                <Button variant="destructive" className="flex-1 rounded-[30px]" onClick={handleCancel}>Sim, cancelar</Button>
-              </div>
+              <Button className="w-full rounded-[30px]" onClick={handleBaixa}>Confirmar Devolução</Button>
             </div>
           </DialogContent>
         </Dialog>
