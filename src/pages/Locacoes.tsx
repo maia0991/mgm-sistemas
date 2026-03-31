@@ -116,7 +116,7 @@ export default function LocacoesPage() {
             <h1 className="text-3xl font-bold text-foreground">Locações</h1>
             <p className="text-muted-foreground">Gerencie todas as locações</p>
           </div>
-          <Link to="/locacoes/nova"><Button className="rounded-[30px] gap-2">Nova Locação</Button></Link>
+          <Link to="/novo-aluguel"><Button className="rounded-[30px] gap-2">Novo Aluguel</Button></Link>
         </div>
 
         <div className="relative">
