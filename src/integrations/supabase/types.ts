@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           endereco_obra: string | null
           id: string
+          locadora_id: string | null
           nome_completo: string
           notas_observacoes: string | null
           updated_at: string
@@ -32,6 +33,7 @@ export type Database = {
           created_at?: string
           endereco_obra?: string | null
           id?: string
+          locadora_id?: string | null
           nome_completo: string
           notas_observacoes?: string | null
           updated_at?: string
@@ -43,12 +45,21 @@ export type Database = {
           created_at?: string
           endereco_obra?: string | null
           id?: string
+          locadora_id?: string | null
           nome_completo?: string
           notas_observacoes?: string | null
           updated_at?: string
           whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clientes_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dias_nao_cobrados: {
         Row: {
@@ -56,6 +67,7 @@ export type Database = {
           created_at: string
           data: string
           id: string
+          locadora_id: string | null
           nome: string
           tipo: string
         }
@@ -64,6 +76,7 @@ export type Database = {
           created_at?: string
           data: string
           id?: string
+          locadora_id?: string | null
           nome: string
           tipo?: string
         }
@@ -72,10 +85,19 @@ export type Database = {
           created_at?: string
           data?: string
           id?: string
+          locadora_id?: string | null
           nome?: string
           tipo?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dias_nao_cobrados_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       equipamentos: {
         Row: {
@@ -84,6 +106,7 @@ export type Database = {
           created_at: string
           descricao: string | null
           id: string
+          locadora_id: string | null
           nome: string
           quantidade_disponivel: number
           quantidade_total: number
@@ -96,6 +119,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          locadora_id?: string | null
           nome: string
           quantidade_disponivel?: number
           quantidade_total?: number
@@ -108,13 +132,22 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          locadora_id?: string | null
           nome?: string
           quantidade_disponivel?: number
           quantidade_total?: number
           updated_at?: string
           valor_diaria?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "equipamentos_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       itens_locacao: {
         Row: {
@@ -167,6 +200,7 @@ export type Database = {
           data_inicio: string
           data_previsao_entrega: string
           id: string
+          locadora_id: string | null
           notas_observacoes: string | null
           numero_contrato: number
           situacao: string
@@ -185,6 +219,7 @@ export type Database = {
           data_inicio: string
           data_previsao_entrega: string
           id?: string
+          locadora_id?: string | null
           notas_observacoes?: string | null
           numero_contrato?: number
           situacao?: string
@@ -203,6 +238,7 @@ export type Database = {
           data_inicio?: string
           data_previsao_entrega?: string
           id?: string
+          locadora_id?: string | null
           notas_observacoes?: string | null
           numero_contrato?: number
           situacao?: string
@@ -221,7 +257,62 @@ export type Database = {
             referencedRelation: "clientes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "locacoes_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      locadoras: {
+        Row: {
+          ativo: boolean
+          cnpj: string | null
+          created_at: string
+          data_vencimento: string | null
+          email: string | null
+          endereco: string | null
+          id: string
+          nome: string
+          notas: string | null
+          plano: string
+          responsavel: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cnpj?: string | null
+          created_at?: string
+          data_vencimento?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome: string
+          notas?: string | null
+          plano?: string
+          responsavel?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cnpj?: string | null
+          created_at?: string
+          data_vencimento?: string | null
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome?: string
+          notas?: string | null
+          plano?: string
+          responsavel?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       perfil_empresa: {
         Row: {
@@ -230,6 +321,7 @@ export type Database = {
           email: string | null
           endereco: string | null
           id: string
+          locadora_id: string | null
           nome_empresa: string
           notas: string | null
           responsavel: string | null
@@ -242,6 +334,7 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           id?: string
+          locadora_id?: string | null
           nome_empresa?: string
           notas?: string | null
           responsavel?: string | null
@@ -254,13 +347,22 @@ export type Database = {
           email?: string | null
           endereco?: string | null
           id?: string
+          locadora_id?: string | null
           nome_empresa?: string
           notas?: string | null
           responsavel?: string | null
           telefone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "perfil_empresa_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       perfis: {
         Row: {
@@ -268,6 +370,7 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          locadora_id: string | null
           nome: string | null
           updated_at: string
           user_id: string
@@ -277,6 +380,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          locadora_id?: string | null
           nome?: string | null
           updated_at?: string
           user_id: string
@@ -286,6 +390,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          locadora_id?: string | null
           nome?: string | null
           updated_at?: string
           user_id?: string
@@ -296,6 +401,13 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_locadora_id_fkey"
+            columns: ["locadora_id"]
+            isOneToOne: false
+            referencedRelation: "locadoras"
             referencedColumns: ["id"]
           },
         ]
@@ -323,6 +435,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_locadora_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
