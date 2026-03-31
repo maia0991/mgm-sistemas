@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard,
   Users,
@@ -7,19 +8,23 @@ import {
   FileText,
   Calendar,
   Plus,
+  LogOut,
+  UserCog,
 } from "lucide-react";
 
-const links = [
+const adminLinks = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/locacoes/nova", label: "Nova Locação", icon: Plus },
   { to: "/locacoes", label: "Locações", icon: FileText },
   { to: "/clientes", label: "Clientes", icon: Users },
   { to: "/equipamentos", label: "Equipamentos", icon: Package },
   { to: "/feriados", label: "Feriados", icon: Calendar },
+  { to: "/usuarios", label: "Usuários", icon: UserCog },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
+  const { signOut, perfil } = useAuth();
 
   return (
     <aside className="no-print fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-border bg-sidebar">
@@ -32,7 +37,7 @@ export default function Sidebar() {
         </span>
       </div>
       <nav className="flex-1 space-y-1 p-4">
-        {links.map((link) => {
+        {adminLinks.map((link) => {
           const active = location.pathname === link.to;
           return (
             <Link
@@ -51,8 +56,14 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-border p-4">
-        <p className="text-xs text-muted-foreground">MGM Sistemas v2.0</p>
+      <div className="border-t border-border p-4 space-y-3">
+        <p className="text-xs text-muted-foreground truncate">{perfil?.email}</p>
+        <button
+          onClick={signOut}
+          className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <LogOut className="h-4 w-4" /> Sair
+        </button>
       </div>
     </aside>
   );
