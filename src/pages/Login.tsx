@@ -68,9 +68,8 @@ export default function LoginPage({ adminMode: initialAdminMode = false }: Login
 
       if (adminMode && roleData?.role === "admin") {
         localStorage.setItem("mgm_trusted_device", "true");
-        navigate("/");
+        navigate("/admin-dashboard");
       } else if (roleData?.role === "admin" && !adminMode) {
-        // Admin trying to login through client portal - deny
         await supabase.auth.signOut();
         toast.error("Acesso não autorizado neste portal");
       } else if (roleData?.role === "cliente") {
@@ -78,10 +77,20 @@ export default function LoginPage({ adminMode: initialAdminMode = false }: Login
           await supabase.auth.signOut();
           toast.error("Esta conta não possui acesso administrativo");
         } else {
-          navigate("/meus-alugueis");
+          // Check if locadora is active
+          const { data: perfilData } = await supabase.from("perfis").select("locadora_id").eq("user_id", user.id).single();
+          if (perfilData?.locadora_id) {
+            const { data: locadora } = await supabase.from("locadoras").select("ativo").eq("id", perfilData.locadora_id).single();
+            if (locadora && !locadora.ativo) {
+              await supabase.auth.signOut();
+              toast.error("Seu acesso está bloqueado. Entre em contato com a MGM Sistemas.");
+              return;
+            }
+          }
+          navigate("/");
         }
       } else {
-        navigate("/meus-alugueis");
+        navigate("/");
       }
     }
   }
@@ -121,8 +130,8 @@ export default function LoginPage({ adminMode: initialAdminMode = false }: Login
             {mode === "forgot"
               ? "Recuperar senha"
               : adminMode
-                ? "Acesso Administrativo"
-                : "Portal do Cliente"}
+                ? "Acesso Master MGM"
+                : "Acesso da Locadora"}
           </p>
           {adminMode && (
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">

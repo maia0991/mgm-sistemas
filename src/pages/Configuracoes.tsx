@@ -1,11 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { Building2, UserCog, Settings as SettingsIcon } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 const configSections = [
   { to: "/perfil-empresa", label: "Perfil da Empresa", desc: "CNPJ, endereço, telefone e dados que aparecem no contrato", icon: Building2 },
-  { to: "/usuarios", label: "Usuários", desc: "Gerencie os acessos de clientes e administradores", icon: UserCog },
 ];
 
 export default function ConfiguracoesPage() {

@@ -15,14 +15,14 @@ import Contrato from "./pages/Contrato.tsx";
 import EditarLocacao from "./pages/EditarLocacao.tsx";
 import PerfilEmpresa from "./pages/PerfilEmpresa.tsx";
 import Feriados from "./pages/Feriados.tsx";
-import Usuarios from "./pages/Usuarios.tsx";
-import MeusAlugueis from "./pages/MeusAlugueis.tsx";
-import MeuPerfil from "./pages/MeuPerfil.tsx";
 import Devolucao from "./pages/Devolucao.tsx";
 import Financeiro from "./pages/Financeiro.tsx";
 import Relatorios from "./pages/Relatorios.tsx";
 import Backup from "./pages/Backup.tsx";
 import Configuracoes from "./pages/Configuracoes.tsx";
+import AdminDashboard from "./pages/AdminDashboard.tsx";
+import AdminLocadoras from "./pages/AdminLocadoras.tsx";
+import AdminPagamentos from "./pages/AdminPagamentos.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -44,28 +44,28 @@ const App = () => (
             <Route path="/mgm-admin" element={<AdminLoginPage />} />
             <Route path="/admin" element={<Navigate to="/login" replace />} />
 
-            {/* Main system routes */}
-            <Route path="/" element={<ProtectedRoute allowedRoles={["admin"]}><Index /></ProtectedRoute>} />
-            <Route path="/produtos" element={<ProtectedRoute allowedRoles={["admin"]}><Equipamentos /></ProtectedRoute>} />
-            <Route path="/clientes" element={<ProtectedRoute allowedRoles={["admin"]}><Clientes /></ProtectedRoute>} />
-            <Route path="/novo-aluguel" element={<ProtectedRoute allowedRoles={["admin"]}><NovaLocacao /></ProtectedRoute>} />
-            <Route path="/alugueis" element={<ProtectedRoute allowedRoles={["admin"]}><Locacoes /></ProtectedRoute>} />
-            <Route path="/alugueis/:id/editar" element={<ProtectedRoute allowedRoles={["admin"]}><EditarLocacao /></ProtectedRoute>} />
-            <Route path="/devolucao" element={<ProtectedRoute allowedRoles={["admin"]}><Devolucao /></ProtectedRoute>} />
-            <Route path="/financeiro" element={<ProtectedRoute allowedRoles={["admin"]}><Financeiro /></ProtectedRoute>} />
-            <Route path="/dias-nao-cobrados" element={<ProtectedRoute allowedRoles={["admin"]}><Feriados /></ProtectedRoute>} />
-            <Route path="/relatorios" element={<ProtectedRoute allowedRoles={["admin"]}><Relatorios /></ProtectedRoute>} />
-            <Route path="/backup" element={<ProtectedRoute allowedRoles={["admin"]}><Backup /></ProtectedRoute>} />
-            <Route path="/configuracoes" element={<ProtectedRoute allowedRoles={["admin"]}><Configuracoes /></ProtectedRoute>} />
-            <Route path="/perfil-empresa" element={<ProtectedRoute allowedRoles={["admin"]}><PerfilEmpresa /></ProtectedRoute>} />
-            <Route path="/usuarios" element={<ProtectedRoute allowedRoles={["admin"]}><Usuarios /></ProtectedRoute>} />
+            {/* Admin (MGM owner) routes */}
+            <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin-locadoras" element={<ProtectedRoute allowedRoles={["admin"]}><AdminLocadoras /></ProtectedRoute>} />
+            <Route path="/admin-pagamentos" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPagamentos /></ProtectedRoute>} />
+
+            {/* Locadora (cliente) routes */}
+            <Route path="/" element={<ProtectedRoute allowedRoles={["cliente"]}><Index /></ProtectedRoute>} />
+            <Route path="/produtos" element={<ProtectedRoute allowedRoles={["cliente"]}><Equipamentos /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute allowedRoles={["cliente"]}><Clientes /></ProtectedRoute>} />
+            <Route path="/novo-aluguel" element={<ProtectedRoute allowedRoles={["cliente"]}><NovaLocacao /></ProtectedRoute>} />
+            <Route path="/alugueis" element={<ProtectedRoute allowedRoles={["cliente"]}><Locacoes /></ProtectedRoute>} />
+            <Route path="/alugueis/:id/editar" element={<ProtectedRoute allowedRoles={["cliente"]}><EditarLocacao /></ProtectedRoute>} />
+            <Route path="/devolucao" element={<ProtectedRoute allowedRoles={["cliente"]}><Devolucao /></ProtectedRoute>} />
+            <Route path="/financeiro" element={<ProtectedRoute allowedRoles={["cliente"]}><Financeiro /></ProtectedRoute>} />
+            <Route path="/dias-nao-cobrados" element={<ProtectedRoute allowedRoles={["cliente"]}><Feriados /></ProtectedRoute>} />
+            <Route path="/relatorios" element={<ProtectedRoute allowedRoles={["cliente"]}><Relatorios /></ProtectedRoute>} />
+            <Route path="/backup" element={<ProtectedRoute allowedRoles={["cliente"]}><Backup /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute allowedRoles={["cliente"]}><Configuracoes /></ProtectedRoute>} />
+            <Route path="/perfil-empresa" element={<ProtectedRoute allowedRoles={["cliente"]}><PerfilEmpresa /></ProtectedRoute>} />
 
             {/* Shared routes */}
             <Route path="/locacoes/:id/contrato" element={<ProtectedRoute><Contrato /></ProtectedRoute>} />
-
-            {/* Client portal routes */}
-            <Route path="/meus-alugueis" element={<ProtectedRoute allowedRoles={["cliente"]}><MeusAlugueis /></ProtectedRoute>} />
-            <Route path="/meu-perfil" element={<ProtectedRoute allowedRoles={["cliente"]}><MeuPerfil /></ProtectedRoute>} />
 
             {/* Legacy redirects */}
             <Route path="/equipamentos" element={<Navigate to="/produtos" replace />} />

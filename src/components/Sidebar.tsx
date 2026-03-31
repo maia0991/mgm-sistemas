@@ -14,9 +14,11 @@ import {
   HardDrive,
   Settings,
   LogOut,
+  Building2,
+  CreditCard,
 } from "lucide-react";
 
-const adminLinks = [
+const locadoraLinks = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/clientes", label: "Clientes", icon: Users },
@@ -30,9 +32,18 @@ const adminLinks = [
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
+const adminLinks = [
+  { to: "/admin-dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin-locadoras", label: "Locadoras", icon: Building2 },
+  { to: "/admin-pagamentos", label: "Pagamentos", icon: CreditCard },
+];
+
 export default function Sidebar() {
   const location = useLocation();
-  const { signOut, perfil } = useAuth();
+  const { signOut, perfil, role } = useAuth();
+
+  const links = role === "admin" ? adminLinks : locadoraLinks;
+  const subtitulo = role === "admin" ? "Painel Master" : "Gestão de Locações";
 
   return (
     <aside className="no-print fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-primary/30 bg-sidebar shadow-[inset_-1px_0_0_hsl(210_100%_52%/0.15)]">
@@ -42,11 +53,11 @@ export default function Sidebar() {
         </div>
         <div>
           <span className="text-lg font-bold tracking-tight text-foreground">MGM Sistemas</span>
-          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">Gestão de Locações</p>
+          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">{subtitulo}</p>
         </div>
       </div>
       <nav className="flex-1 space-y-1 overflow-auto p-4">
-        {adminLinks.map((link) => {
+        {links.map((link) => {
           const active = location.pathname === link.to;
           return (
             <Link
