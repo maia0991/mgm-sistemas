@@ -145,7 +145,7 @@ export default function LocacoesPage() {
                   </Link>
                   {l.situacao === "ativo" && (
                     <>
-                      <Link to={`/locacoes/${l.id}/editar`}>
+                      <Link to={`/alugueis/${l.id}/editar`}>
                         <Button variant="ghost" size="icon" className="rounded-full"><Pencil className="h-4 w-4" /></Button>
                       </Link>
                       <Button variant="ghost" size="icon" className="rounded-full text-success" onClick={() => openBaixa(l)}>

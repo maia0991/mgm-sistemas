@@ -141,7 +141,7 @@ export default function EditarLocacaoPage() {
       }
 
       toast.success("Locação atualizada!");
-      navigate("/locacoes");
+      navigate("/alugueis");
     } catch (err) {
       toast.error("Erro ao salvar");
       console.error(err);
