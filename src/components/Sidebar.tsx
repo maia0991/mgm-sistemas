@@ -27,14 +27,15 @@ export default function Sidebar() {
   const { signOut, perfil } = useAuth();
 
   return (
-    <aside className="no-print fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-border bg-sidebar">
-      <div className="flex h-16 items-center gap-3 border-b border-border px-6">
-        <div className="gradient-primary flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-primary-foreground">
+    <aside className="no-print fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-primary/30 bg-sidebar shadow-[inset_-1px_0_0_hsl(210_100%_52%/0.15)]">
+      <div className="flex h-16 items-center gap-3 border-b border-primary/20 px-6">
+        <div className="gradient-primary flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-primary-foreground ring-2 ring-primary/30 ring-offset-1 ring-offset-sidebar">
           M
         </div>
-        <span className="text-lg font-bold tracking-tight text-foreground">
-          MGM Sistemas
-        </span>
+        <div>
+          <span className="text-lg font-bold tracking-tight text-foreground">MGM Sistemas</span>
+          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">Painel Administrativo</p>
+        </div>
       </div>
       <nav className="flex-1 space-y-1 p-4">
         {adminLinks.map((link) => {
