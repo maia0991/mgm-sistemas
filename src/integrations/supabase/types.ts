@@ -223,6 +223,45 @@ export type Database = {
           },
         ]
       }
+      perfil_empresa: {
+        Row: {
+          cpf_cnpj: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          id: string
+          nome_empresa: string
+          notas: string | null
+          responsavel: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          cpf_cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome_empresa?: string
+          notas?: string | null
+          responsavel?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cpf_cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome_empresa?: string
+          notas?: string | null
+          responsavel?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       perfis: {
         Row: {
           cliente_id: string | null
