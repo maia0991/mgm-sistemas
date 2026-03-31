@@ -115,7 +115,7 @@ export default function NovaLocacaoPage() {
       }
 
       toast.success(`Locação #${locacao.numero_contrato} criada!`);
-      navigate("/locacoes");
+      navigate("/alugueis");
     } catch (err) {
       toast.error("Erro ao salvar locação");
       console.error(err);
