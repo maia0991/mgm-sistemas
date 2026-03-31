@@ -10,6 +10,7 @@ import {
   Plus,
   LogOut,
   UserCog,
+  Building2,
 } from "lucide-react";
 
 const adminLinks = [
@@ -19,6 +20,7 @@ const adminLinks = [
   { to: "/clientes", label: "Clientes", icon: Users },
   { to: "/equipamentos", label: "Equipamentos", icon: Package },
   { to: "/feriados", label: "Feriados", icon: Calendar },
+  { to: "/perfil-empresa", label: "Perfil Empresa", icon: Building2 },
   { to: "/usuarios", label: "Usuários", icon: UserCog },
 ];
 
