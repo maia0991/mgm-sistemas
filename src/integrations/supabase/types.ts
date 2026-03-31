@@ -14,7 +14,215 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clientes: {
+        Row: {
+          ativo: boolean
+          cpf_cnpj: string | null
+          created_at: string
+          endereco_obra: string | null
+          id: string
+          nome_completo: string
+          notas_observacoes: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          cpf_cnpj?: string | null
+          created_at?: string
+          endereco_obra?: string | null
+          id?: string
+          nome_completo: string
+          notas_observacoes?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          cpf_cnpj?: string | null
+          created_at?: string
+          endereco_obra?: string | null
+          id?: string
+          nome_completo?: string
+          notas_observacoes?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      dias_nao_cobrados: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          data: string
+          id: string
+          nome: string
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          data: string
+          id?: string
+          nome: string
+          tipo?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          data?: string
+          id?: string
+          nome?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      equipamentos: {
+        Row: {
+          ativo: boolean
+          categoria: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          quantidade_disponivel: number
+          quantidade_total: number
+          updated_at: string
+          valor_diaria: number
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          quantidade_disponivel?: number
+          quantidade_total?: number
+          updated_at?: string
+          valor_diaria?: number
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          quantidade_disponivel?: number
+          quantidade_total?: number
+          updated_at?: string
+          valor_diaria?: number
+        }
+        Relationships: []
+      }
+      itens_locacao: {
+        Row: {
+          created_at: string
+          equipamento_id: string
+          id: string
+          locacao_id: string
+          quantidade_locada: number
+          valor_diaria_fechado: number
+        }
+        Insert: {
+          created_at?: string
+          equipamento_id: string
+          id?: string
+          locacao_id: string
+          quantidade_locada?: number
+          valor_diaria_fechado?: number
+        }
+        Update: {
+          created_at?: string
+          equipamento_id?: string
+          id?: string
+          locacao_id?: string
+          quantidade_locada?: number
+          valor_diaria_fechado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itens_locacao_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_locacao_locacao_id_fkey"
+            columns: ["locacao_id"]
+            isOneToOne: false
+            referencedRelation: "locacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locacoes: {
+        Row: {
+          cliente_id: string
+          cobrar_domingo: boolean
+          created_at: string
+          data_devolucao_real: string | null
+          data_inicio: string
+          data_previsao_entrega: string
+          id: string
+          notas_observacoes: string | null
+          numero_contrato: number
+          situacao: string
+          taxa_entrega: number
+          updated_at: string
+          valor_avaria: number
+          valor_desconto: number
+          valor_total_final: number
+          valor_total_pago: number
+        }
+        Insert: {
+          cliente_id: string
+          cobrar_domingo?: boolean
+          created_at?: string
+          data_devolucao_real?: string | null
+          data_inicio: string
+          data_previsao_entrega: string
+          id?: string
+          notas_observacoes?: string | null
+          numero_contrato?: number
+          situacao?: string
+          taxa_entrega?: number
+          updated_at?: string
+          valor_avaria?: number
+          valor_desconto?: number
+          valor_total_final?: number
+          valor_total_pago?: number
+        }
+        Update: {
+          cliente_id?: string
+          cobrar_domingo?: boolean
+          created_at?: string
+          data_devolucao_real?: string | null
+          data_inicio?: string
+          data_previsao_entrega?: string
+          id?: string
+          notas_observacoes?: string | null
+          numero_contrato?: number
+          situacao?: string
+          taxa_entrega?: number
+          updated_at?: string
+          valor_avaria?: number
+          valor_desconto?: number
+          valor_total_final?: number
+          valor_total_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locacoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
