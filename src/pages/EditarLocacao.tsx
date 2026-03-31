@@ -223,7 +223,7 @@ export default function EditarLocacaoPage() {
         </div>
 
         <div className="flex gap-4">
-          <Button variant="outline" className="flex-1 rounded-[30px] h-12" onClick={() => navigate("/locacoes")}>Cancelar</Button>
+          <Button variant="outline" className="flex-1 rounded-[30px] h-12" onClick={() => navigate("/alugueis")}>Cancelar</Button>
           <Button className="flex-1 rounded-[30px] h-12 text-base" onClick={handleSave} disabled={saving}>
             {saving ? "Salvando..." : "Salvar Alterações"}
           </Button>
