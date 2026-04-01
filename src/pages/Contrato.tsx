@@ -16,6 +16,7 @@ interface PerfilEmpresa {
 
 export default function ContratoPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [locacao, setLocacao] = useState<LocacaoComCliente | null>(null);
   const [equipamentos, setEquipamentos] = useState<Record<string, Equipamento>>({});
   const [empresa, setEmpresa] = useState<PerfilEmpresa | null>(null);
