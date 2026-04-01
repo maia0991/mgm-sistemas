@@ -17,7 +17,7 @@ export default function LoginPage({ adminMode: initialAdminMode = false }: Login
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "forgot">("login");
-  const [adminMode, setAdminMode] = useState(initialAdminMode || localStorage.getItem("mgm_trusted_device") === "true");
+  const [adminMode, setAdminMode] = useState(initialAdminMode);
 
   // Long press on logo (5 seconds)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
