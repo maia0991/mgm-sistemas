@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ export default function PerfilEmpresaPage() {
   const [form, setForm] = useState<PerfilEmpresa>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
+  const { locadoraId } = useAuth();
 
   useEffect(() => {
     fetchPerfil();
@@ -63,7 +65,8 @@ export default function PerfilEmpresaPage() {
       if (existingId) {
         await supabase.from("perfil_empresa").update(form).eq("id", existingId);
       } else {
-        const { data } = await supabase.from("perfil_empresa").insert(form).select().single();
+        const payload = { ...form, locadora_id: locadoraId };
+        const { data } = await supabase.from("perfil_empresa").insert(payload).select().single();
         if (data) setExistingId(data.id);
       }
       toast.success("Perfil da empresa salvo!");
