@@ -65,7 +65,8 @@ export default function PerfilEmpresaPage() {
       if (existingId) {
         await supabase.from("perfil_empresa").update(form).eq("id", existingId);
       } else {
-        const { data } = await supabase.from("perfil_empresa").insert(form).select().single();
+        const payload = { ...form, locadora_id: locadoraId };
+        const { data } = await supabase.from("perfil_empresa").insert(payload).select().single();
         if (data) setExistingId(data.id);
       }
       toast.success("Perfil da empresa salvo!");
