@@ -139,6 +139,8 @@ export default function DevolucaoPage() {
                   <p className="font-semibold text-foreground">Resumo da Devolução:</p>
                   <div className="grid grid-cols-2 gap-1">
                     <p className="text-muted-foreground">Dias cobrados:</p><p className="text-right font-bold text-foreground">{baixaPreview.diasReais}</p>
+                    {valorAvaria > 0 && <><p className="text-muted-foreground">Avarias:</p><p className="text-right font-bold text-destructive">+ {formatCurrency(valorAvaria)}</p></>}
+                    {descontoBaixa > 0 && <><p className="text-muted-foreground">Desconto:</p><p className="text-right font-bold text-success">- {formatCurrency(descontoBaixa)}</p></>}
                     <p className="text-muted-foreground">Valor calculado:</p><p className="text-right font-bold text-foreground">{formatCurrency(baixaPreview.valorCalculado)}</p>
                     <p className="text-muted-foreground">Entrada paga:</p><p className="text-right font-bold text-success">{formatCurrency(baixaPreview.entrada)}</p>
                     <p className="text-muted-foreground font-bold">Saldo a cobrar:</p>
