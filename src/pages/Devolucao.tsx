@@ -19,6 +19,7 @@ export default function DevolucaoPage() {
   const [selectedLocacao, setSelectedLocacao] = useState<LocacaoComCliente | null>(null);
   const [dataDevolucao, setDataDevolucao] = useState("");
   const [valorAvaria, setValorAvaria] = useState(0);
+  const [descontoBaixa, setDescontoBaixa] = useState(0);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -35,6 +36,7 @@ export default function DevolucaoPage() {
     setSelectedLocacao(loc);
     setDataDevolucao("");
     setValorAvaria(0);
+    setDescontoBaixa(0);
     setBaixaOpen(true);
   }
 
@@ -51,7 +53,7 @@ export default function DevolucaoPage() {
       diasReais,
       Number(selectedLocacao.taxa_entrega),
       Number(selectedLocacao.valor_desconto)
-    ) + valorAvaria;
+    ) + valorAvaria - descontoBaixa;
     const entrada = Number(selectedLocacao.valor_total_pago);
     const saldo = valorCalculado - entrada;
     return { diasReais, valorCalculado, entrada, saldo };
@@ -130,12 +132,15 @@ export default function DevolucaoPage() {
               <p className="text-sm text-muted-foreground">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
               <div><Label className="text-foreground">Data Real de Devolução</Label><Input className="rounded-[30px]" type="date" value={dataDevolucao} onChange={(e) => setDataDevolucao(e.target.value)} /></div>
               <div><Label className="text-foreground">Valor de Avarias (R$)</Label><Input className="rounded-[30px]" type="number" step="0.01" value={valorAvaria} onChange={(e) => setValorAvaria(parseFloat(e.target.value) || 0)} /></div>
+              <div><Label className="text-foreground">Desconto na Devolução (R$)</Label><Input className="rounded-[30px]" type="number" step="0.01" value={descontoBaixa} onChange={(e) => setDescontoBaixa(parseFloat(e.target.value) || 0)} /></div>
 
               {baixaPreview && (
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
                   <p className="font-semibold text-foreground">Resumo da Devolução:</p>
                   <div className="grid grid-cols-2 gap-1">
                     <p className="text-muted-foreground">Dias cobrados:</p><p className="text-right font-bold text-foreground">{baixaPreview.diasReais}</p>
+                    {valorAvaria > 0 && <><p className="text-muted-foreground">Avarias:</p><p className="text-right font-bold text-destructive">+ {formatCurrency(valorAvaria)}</p></>}
+                    {descontoBaixa > 0 && <><p className="text-muted-foreground">Desconto:</p><p className="text-right font-bold text-success">- {formatCurrency(descontoBaixa)}</p></>}
                     <p className="text-muted-foreground">Valor calculado:</p><p className="text-right font-bold text-foreground">{formatCurrency(baixaPreview.valorCalculado)}</p>
                     <p className="text-muted-foreground">Entrada paga:</p><p className="text-right font-bold text-success">{formatCurrency(baixaPreview.entrada)}</p>
                     <p className="text-muted-foreground font-bold">Saldo a cobrar:</p>
