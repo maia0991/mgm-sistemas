@@ -33,6 +33,7 @@ export default function PerfilEmpresaPage() {
   const [form, setForm] = useState<PerfilEmpresa>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
+  const { locadoraId } = useAuth();
 
   useEffect(() => {
     fetchPerfil();
