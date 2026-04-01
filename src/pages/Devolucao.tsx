@@ -19,6 +19,7 @@ export default function DevolucaoPage() {
   const [selectedLocacao, setSelectedLocacao] = useState<LocacaoComCliente | null>(null);
   const [dataDevolucao, setDataDevolucao] = useState("");
   const [valorAvaria, setValorAvaria] = useState(0);
+  const [descontoBaixa, setDescontoBaixa] = useState(0);
 
   useEffect(() => { fetchData(); }, []);
 
