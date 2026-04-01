@@ -132,6 +132,7 @@ export default function DevolucaoPage() {
               <p className="text-sm text-muted-foreground">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
               <div><Label className="text-foreground">Data Real de Devolução</Label><Input className="rounded-[30px]" type="date" value={dataDevolucao} onChange={(e) => setDataDevolucao(e.target.value)} /></div>
               <div><Label className="text-foreground">Valor de Avarias (R$)</Label><Input className="rounded-[30px]" type="number" step="0.01" value={valorAvaria} onChange={(e) => setValorAvaria(parseFloat(e.target.value) || 0)} /></div>
+              <div><Label className="text-foreground">Desconto na Devolução (R$)</Label><Input className="rounded-[30px]" type="number" step="0.01" value={descontoBaixa} onChange={(e) => setDescontoBaixa(parseFloat(e.target.value) || 0)} /></div>
 
               {baixaPreview && (
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
