@@ -36,6 +36,7 @@ export default function DevolucaoPage() {
     setSelectedLocacao(loc);
     setDataDevolucao("");
     setValorAvaria(0);
+    setDescontoBaixa(0);
     setBaixaOpen(true);
   }
 
