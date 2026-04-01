@@ -52,7 +52,10 @@ export default function ContratoPage() {
 
   return (
     <div className="min-h-screen bg-background p-4">
-      <div className="no-print mb-4 flex justify-end">
+      <div className="no-print mb-4 flex justify-between">
+        <button onClick={() => navigate(-1)} className="rounded-[30px] bg-muted px-6 py-2 text-sm font-medium text-foreground flex items-center gap-2 hover:bg-muted/80">
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </button>
         <button onClick={() => window.print()} className="rounded-[30px] bg-primary px-6 py-2 text-sm font-medium text-primary-foreground">
           Imprimir Contrato
         </button>
