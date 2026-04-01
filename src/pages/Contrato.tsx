@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { LocacaoComCliente, Equipamento } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/calculos";
+import { ArrowLeft } from "lucide-react";
 
 interface PerfilEmpresa {
   nome_empresa: string;
