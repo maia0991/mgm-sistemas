@@ -26,7 +26,7 @@ export default function ContratoPage() {
     async function fetch() {
       const [locRes, empRes] = await Promise.all([
         supabase.from("locacoes").select("*, clientes(*), itens_locacao(*)").eq("id", id).single(),
-        supabase.from("perfil_empresa").select("*").limit(1).single(),
+        supabase.from("perfil_empresa").select("*").limit(1).maybeSingle(),
       ]);
       if (locRes.data) {
         setLocacao(locRes.data as LocacaoComCliente);

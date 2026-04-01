@@ -40,7 +40,7 @@ export default function PerfilEmpresaPage() {
   }, []);
 
   async function fetchPerfil() {
-    const { data } = await supabase.from("perfil_empresa").select("*").limit(1).single();
+    const { data } = await supabase.from("perfil_empresa").select("*").limit(1).maybeSingle();
     if (data) {
       setForm({
         nome_empresa: data.nome_empresa || "",
