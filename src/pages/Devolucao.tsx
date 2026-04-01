@@ -53,7 +53,7 @@ export default function DevolucaoPage() {
       diasReais,
       Number(selectedLocacao.taxa_entrega),
       Number(selectedLocacao.valor_desconto)
-    ) + valorAvaria;
+    ) + valorAvaria - descontoBaixa;
     const entrada = Number(selectedLocacao.valor_total_pago);
     const saldo = valorCalculado - entrada;
     return { diasReais, valorCalculado, entrada, saldo };
