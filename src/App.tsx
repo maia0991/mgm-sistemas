@@ -12,6 +12,7 @@ import Equipamentos from "./pages/Equipamentos.tsx";
 import Locacoes from "./pages/Locacoes.tsx";
 import NovaLocacao from "./pages/NovaLocacao.tsx";
 import Contrato from "./pages/Contrato.tsx";
+import ComprovanteLocacao from "./pages/ComprovanteLocacao.tsx";
 import EditarLocacao from "./pages/EditarLocacao.tsx";
 import PerfilEmpresa from "./pages/PerfilEmpresa.tsx";
 import Feriados from "./pages/Feriados.tsx";
@@ -38,40 +39,208 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/mgm-admin" element={<AdminLoginPage />} />
             <Route path="/admin" element={<Navigate to="/login" replace />} />
 
-            {/* Admin (MGM owner) routes */}
-            <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
-            <Route path="/admin-locadoras" element={<ProtectedRoute allowedRoles={["admin"]}><AdminLocadoras /></ProtectedRoute>} />
-            <Route path="/admin-pagamentos" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPagamentos /></ProtectedRoute>} />
+            <Route
+              path="/admin-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-locadoras"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminLocadoras />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-pagamentos"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <AdminPagamentos />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Locadora (cliente) routes */}
-            <Route path="/" element={<ProtectedRoute allowedRoles={["cliente"]}><Index /></ProtectedRoute>} />
-            <Route path="/produtos" element={<ProtectedRoute allowedRoles={["cliente"]}><Equipamentos /></ProtectedRoute>} />
-            <Route path="/clientes" element={<ProtectedRoute allowedRoles={["cliente"]}><Clientes /></ProtectedRoute>} />
-            <Route path="/novo-aluguel" element={<ProtectedRoute allowedRoles={["cliente"]}><NovaLocacao /></ProtectedRoute>} />
-            <Route path="/alugueis" element={<ProtectedRoute allowedRoles={["cliente"]}><Locacoes /></ProtectedRoute>} />
-            <Route path="/alugueis/:id/editar" element={<ProtectedRoute allowedRoles={["cliente"]}><EditarLocacao /></ProtectedRoute>} />
-            <Route path="/devolucao" element={<ProtectedRoute allowedRoles={["cliente"]}><Devolucao /></ProtectedRoute>} />
-            <Route path="/financeiro" element={<ProtectedRoute allowedRoles={["cliente"]}><Financeiro /></ProtectedRoute>} />
-            <Route path="/dias-nao-cobrados" element={<ProtectedRoute allowedRoles={["cliente"]}><Feriados /></ProtectedRoute>} />
-            <Route path="/relatorios" element={<ProtectedRoute allowedRoles={["cliente"]}><Relatorios /></ProtectedRoute>} />
-            <Route path="/backup" element={<ProtectedRoute allowedRoles={["cliente"]}><Backup /></ProtectedRoute>} />
-            <Route path="/configuracoes" element={<ProtectedRoute allowedRoles={["cliente"]}><Configuracoes /></ProtectedRoute>} />
-            <Route path="/perfil-empresa" element={<ProtectedRoute allowedRoles={["cliente"]}><PerfilEmpresa /></ProtectedRoute>} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/produtos"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Equipamentos />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/clientes"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Clientes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/novo-aluguel"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <NovaLocacao />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alugueis"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <Locacoes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alugueis/:id/editar"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <EditarLocacao />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alugueis/:id/contrato"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <Contrato />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alugueis/:id/comprovante"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <ComprovanteLocacao />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/devolucao"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <Devolucao />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financeiro"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Financeiro />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dias-nao-cobrados"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Feriados />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/relatorios"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Relatorios />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/backup"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Backup />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configuracoes"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <Configuracoes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perfil-empresa"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <PerfilEmpresa />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Shared routes */}
-            <Route path="/locacoes/:id/contrato" element={<ProtectedRoute><Contrato /></ProtectedRoute>} />
+            <Route
+              path="/locacoes/:id/contrato"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <Contrato />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/locacoes/:id/comprovante"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["locadora"]}
+                  allowPartialBlock
+                >
+                  <ComprovanteLocacao />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Legacy redirects */}
-            <Route path="/equipamentos" element={<Navigate to="/produtos" replace />} />
-            <Route path="/locacoes" element={<Navigate to="/alugueis" replace />} />
-            <Route path="/locacoes/nova" element={<Navigate to="/novo-aluguel" replace />} />
-            <Route path="/feriados" element={<Navigate to="/dias-nao-cobrados" replace />} />
+            <Route
+              path="/equipamentos"
+              element={<Navigate to="/produtos" replace />}
+            />
+            <Route
+              path="/locacoes"
+              element={<Navigate to="/alugueis" replace />}
+            />
+            <Route
+              path="/locacoes/nova"
+              element={<Navigate to="/novo-aluguel" replace />}
+            />
+            <Route
+              path="/feriados"
+              element={<Navigate to="/dias-nao-cobrados" replace />}
+            />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

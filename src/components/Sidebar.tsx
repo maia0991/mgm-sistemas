@@ -40,10 +40,19 @@ const adminLinks = [
 
 export default function Sidebar() {
   const location = useLocation();
-  const { signOut, perfil, role } = useAuth();
+  const { signOut, perfil, role, loading } = useAuth();
 
-  const links = role === "admin" ? adminLinks : locadoraLinks;
-  const subtitulo = role === "admin" ? "Painel Master" : "Gestão de Locações";
+  if (loading) {
+    return null;
+  }
+
+  if (!role) {
+    return null;
+  }
+
+  const isAdmin = role === "admin";
+  const links = isAdmin ? adminLinks : locadoraLinks;
+  const subtitulo = isAdmin ? "Painel Master" : "Gestão de Locações";
 
   return (
     <aside className="no-print fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-primary/30 bg-sidebar shadow-[inset_-1px_0_0_hsl(210_100%_52%/0.15)]">
@@ -52,13 +61,19 @@ export default function Sidebar() {
           M
         </div>
         <div>
-          <span className="text-lg font-bold tracking-tight text-foreground">MGM Sistemas</span>
-          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">{subtitulo}</p>
+          <span className="text-lg font-bold tracking-tight text-foreground">
+            MGM Sistemas
+          </span>
+          <p className="text-[10px] font-medium text-primary/70 -mt-0.5">
+            {subtitulo}
+          </p>
         </div>
       </div>
+
       <nav className="flex-1 space-y-1 overflow-auto p-4">
         {links.map((link) => {
           const active = location.pathname === link.to;
+
           return (
             <Link
               key={link.to}
@@ -76,13 +91,18 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-border p-4 space-y-3">
-        <p className="text-xs text-muted-foreground truncate">{perfil?.email}</p>
+
+      <div className="space-y-3 border-t border-border p-4">
+        <p className="truncate text-xs text-muted-foreground">
+          {perfil?.email}
+        </p>
+
         <button
           onClick={signOut}
-          className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+          className="flex w-full items-center gap-2 rounded-lg px-4 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
         >
-          <LogOut className="h-4 w-4" /> Sair
+          <LogOut className="h-4 w-4" />
+          Sair
         </button>
       </div>
     </aside>

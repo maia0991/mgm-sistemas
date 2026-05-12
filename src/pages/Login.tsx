@@ -5,186 +5,334 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Lock, Mail, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface LoginPageProps {
   adminMode?: boolean;
 }
 
-export default function LoginPage({ adminMode: initialAdminMode = false }: LoginPageProps) {
+export default function LoginPage({
+  adminMode: initialAdminMode = false,
+}: LoginPageProps) {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"login" | "forgot">("login");
+
   const [adminMode, setAdminMode] = useState(initialAdminMode);
 
-  // Long press on logo (5 seconds)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleLogoDown = useCallback(() => {
     pressTimer.current = setTimeout(() => {
       setAdminMode(true);
-      toast.success("Modo administrativo ativado", { duration: 2000 });
+
+      toast.success("Modo administrativo ativado", {
+        duration: 2000,
+      });
     }, 5000);
   }, []);
+
   const handleLogoUp = useCallback(() => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+    }
   }, []);
 
-  // Keyboard shortcut: Ctrl+Shift+A
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.ctrlKey && e.shiftKey && e.key === "A") {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
+
         setAdminMode(true);
-        toast.success("Modo administrativo ativado", { duration: 2000 });
+
+        toast.success("Modo administrativo ativado", {
+          duration: 2000,
+        });
       }
     }
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (!email || !password) { toast.error("Preencha todos os campos"); return; }
 
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-
-    if (error) {
-      toast.error("Email ou senha incorretos");
+    if (!email || !password) {
+      toast.error("Preencha todos os campos");
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: roleData } = await supabase
+    try {
+      setLoading(true);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error(error);
+        toast.error("Email ou senha incorretos");
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error("Usuário não encontrado");
+        return;
+      }
+
+      const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
-        .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (adminMode && roleData?.role === "admin") {
-        localStorage.setItem("mgm_trusted_device", "true");
-        navigate("/admin-dashboard");
-      } else if (roleData?.role === "admin" && !adminMode) {
+      if (roleError) {
+        console.error(roleError);
+
+        toast.error("Erro ao carregar permissões do usuário");
+
         await supabase.auth.signOut();
-        toast.error("Acesso não autorizado neste portal");
-      } else if (roleData?.role === "cliente") {
-        if (adminMode) {
-          await supabase.auth.signOut();
-          toast.error("Esta conta não possui acesso administrativo");
-        } else {
-          // Check if locadora is active
-          const { data: perfilData } = await supabase.from("perfis").select("locadora_id").eq("user_id", user.id).single();
-          if (perfilData?.locadora_id) {
-            const { data: locadora } = await supabase.from("locadoras").select("ativo").eq("id", perfilData.locadora_id).single();
-            if (locadora && !locadora.ativo) {
-              await supabase.auth.signOut();
-              toast.error("Seu acesso está bloqueado. Entre em contato com a MGM Sistemas.");
-              return;
-            }
-          }
-          navigate("/");
-        }
-      } else {
-        navigate("/");
+        return;
       }
-    }
-  }
 
-  async function handleForgotPassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email) { toast.error("Informe o email"); return; }
-    setLoading(true);
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setLoading(false);
-    toast.success("Email de recuperação enviado!");
-    setMode("login");
+      if (!roleData?.role) {
+        toast.error("Usuário sem permissão cadastrada");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // =========================
+      // LOGIN ADMIN
+      // =========================
+      if (adminMode) {
+        if (roleData.role !== "admin") {
+          toast.error("Esta conta não possui acesso administrativo");
+
+          await supabase.auth.signOut();
+          return;
+        }
+
+        localStorage.setItem("mgm_trusted_device", "true");
+
+        toast.success("Login administrativo realizado!");
+
+        navigate("/admin-dashboard", {
+          replace: true,
+        });
+
+        return;
+      }
+
+      // =========================
+      // BLOQUEIA ADMIN NO LOGIN NORMAL
+      // =========================
+      if (roleData.role === "admin") {
+        toast.error("Use o modo administrativo para esta conta");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // =========================
+      // VERIFICA LOCAÇÃO
+      // =========================
+      const { data: perfilData, error: perfilError } = await supabase
+        .from("perfis")
+        .select("locadora_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (perfilError) {
+        console.error(perfilError);
+
+        toast.error("Erro ao carregar perfil");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      if (!perfilData?.locadora_id) {
+        toast.error("Usuário sem locadora vinculada");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      const { data: locadora, error: locadoraError } = await supabase
+        .from("locadoras")
+        .select("ativo, data_vencimento")
+        .eq("id", perfilData.locadora_id)
+        .maybeSingle();
+
+      if (locadoraError) {
+        console.error(locadoraError);
+
+        toast.error("Erro ao carregar locadora");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      if (!locadora?.ativo) {
+        toast.error("Sua locadora está bloqueada.");
+
+        await supabase.auth.signOut();
+        return;
+      }
+
+      toast.success("Login realizado com sucesso!");
+
+      setTimeout(() => {
+        navigate("/", {
+          replace: true,
+        });
+      }, 100);
+    } catch (error) {
+      console.error(error);
+
+      toast.error("Erro inesperado ao fazer login");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className={`w-full max-w-md animate-fade-in rounded-[30px] border bg-card p-8 shadow-2xl transition-all duration-500 ${
-        adminMode ? "border-primary/60 shadow-[0_0_30px_-5px_hsl(210_100%_52%/0.3)]" : "border-border"
-      }`}>
+      <div className="w-full max-w-md rounded-[30px] border border-border bg-card p-8 shadow-2xl">
+        {/* ========================= */}
+        {/* HEADER */}
+        {/* ========================= */}
         <div className="mb-8 text-center">
           <div
-            className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl cursor-pointer select-none transition-all duration-300 ${
-              adminMode ? "gradient-primary ring-2 ring-primary/50 ring-offset-2 ring-offset-card" : "gradient-primary"
-            }`}
             onMouseDown={handleLogoDown}
             onMouseUp={handleLogoUp}
             onMouseLeave={handleLogoUp}
             onTouchStart={handleLogoDown}
             onTouchEnd={handleLogoUp}
+            className="mx-auto mb-4 flex h-16 w-16 cursor-pointer items-center justify-center overflow-hidden rounded-2xl gradient-primary"
           >
-            <span className="text-xl font-bold text-primary-foreground">M</span>
+            <img
+              src="/apple-touch-icon.png"
+              alt="MGM Sistemas"
+              className="h-full w-full object-cover"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">MGM Sistemas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {mode === "forgot"
-              ? "Recuperar senha"
-              : adminMode
-                ? "Acesso Master MGM"
-                : "Acesso da Locadora"}
+
+          <h1 className="text-2xl font-bold text-foreground">
+            {adminMode ? "Painel Administrativo" : "MGM Sistemas"}
+          </h1>
+
+          <p
+            className={
+              adminMode
+                ? "mt-1 text-sm font-semibold text-primary"
+                : "mt-1 text-sm text-muted-foreground"
+            }
+          >
+            {adminMode
+              ? "Acesso do Administrador"
+              : "Acesso da Locadora"}
           </p>
+
           {adminMode && (
-            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              Modo Gestão
-            </div>
+            <button
+              type="button"
+              onClick={() => setAdminMode(false)}
+              className="mt-3 text-xs text-muted-foreground transition hover:text-primary"
+            >
+              Voltar para login da locadora
+            </button>
           )}
         </div>
 
-        {mode === "login" ? (
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-foreground">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-                <Input className="rounded-[30px] pl-10" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-foreground">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-                <Input className="rounded-[30px] pl-10" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-            </div>
-            <Button className={`w-full rounded-[30px] h-11 transition-all ${adminMode ? "shadow-[0_0_20px_-5px_hsl(210_100%_52%/0.4)]" : ""}`} type="submit" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : adminMode ? "Acessar Painel" : "Entrar"}
-            </Button>
+        {/* ========================= */}
+        {/* FORM */}
+        {/* ========================= */}
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-2">
+            <Label>Email</Label>
+
+            <Input
+              type="email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Senha</Label>
+
+            <Input
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={loading}
+            className="h-11 w-full rounded-[30px]"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : adminMode ? (
+              "Entrar como Administrador"
+            ) : (
+              "Entrar"
+            )}
+          </Button>
+
+          {/* ========================= */}
+          {/* WHATSAPP */}
+          {/* ========================= */}
+          {!adminMode && (
             <button
               type="button"
-              className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
-              onClick={() => setMode("forgot")}
+              className="w-full text-center text-sm text-muted-foreground transition hover:text-primary"
+              onClick={() => {
+                const numero = "5599984132226";
+
+                const mensagem = encodeURIComponent(
+                  `Esqueci minha senha. Meu email é: ${email}`
+                );
+
+                window.open(
+                  `https://wa.me/${numero}?text=${mensagem}`,
+                  "_blank"
+                );
+              }}
             >
               Esqueceu a senha?
             </button>
-          </form>
-        ) : (
-          <form onSubmit={handleForgotPassword} className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-foreground">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-                <Input className="rounded-[30px] pl-10" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-            </div>
-            <Button className="w-full rounded-[30px] h-11" type="submit" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar link de recuperação"}
-            </Button>
-            <button type="button" className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors" onClick={() => setMode("login")}>
-              Voltar ao login
-            </button>
-          </form>
-        )}
+          )}
+
+          {/* ========================= */}
+          {/* DICA ADMIN */}
+          {/* ========================= */}
+          {!adminMode && (
+            <p className="pt-2 text-center text-[11px] text-muted-foreground/70">
+              {" "}
+              <span className="font-semibold"></span>
+            </p>
+          )}
+        </form>
       </div>
     </div>
   );

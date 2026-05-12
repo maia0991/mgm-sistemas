@@ -1,87 +1,210 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Layout from "@/components/Layout";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/calculos";
-import { Search } from "lucide-react";
+import StatCard from "@/components/StatCard";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { DollarSign, AlertTriangle, CheckCircle, Building2 } from "lucide-react";
 
-interface Locadora {
+interface LocadoraPagamento {
   id: string;
   nome: string;
-  responsavel: string;
-  plano: string;
   ativo: boolean;
-  data_vencimento: string | null;
+  bloqueio_parcial?: boolean | null;
+  plano?: string | null;
+  data_vencimento?: string | null;
+  email?: string | null;
+  telefone?: string | null;
 }
 
 export default function AdminPagamentosPage() {
-  const [locadoras, setLocadoras] = useState<Locadora[]>([]);
+  const navigate = useNavigate();
+
+  const [locadoras, setLocadoras] = useState<LocadoraPagamento[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   useEffect(() => {
-    supabase.from("locadoras").select("*").order("data_vencimento", { ascending: true }).then(({ data }) => {
-      setLocadoras(data || []);
-    });
+    void checkAccessAndLoad();
   }, []);
+
+  async function checkAccessAndLoad() {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", authData.user.id)
+        .single();
+
+      if (roleData?.role !== "admin") {
+        toast.error("Acesso restrito ao administrador");
+        navigate("/", { replace: true });
+        return;
+      }
+
+      await fetchPagamentos();
+    } catch (error) {
+      console.error("Erro ao validar acesso:", error);
+      toast.error("Erro ao validar acesso");
+      navigate("/", { replace: true });
+    } finally {
+      setCheckingAccess(false);
+    }
+  }
+
+  async function fetchPagamentos() {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("locadoras")
+        .select("id, nome, ativo, bloqueio_parcial, plano, data_vencimento, email, telefone")
+        .order("nome");
+
+      if (error) {
+        toast.error("Erro ao carregar pagamentos");
+        return;
+      }
+
+      setLocadoras((data as LocadoraPagamento[]) || []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 🔥 NOVA FUNÇÃO: DAR BAIXA NO PAGAMENTO
+  async function marcarComoPago(locadora: LocadoraPagamento) {
+    try {
+      const novaData = new Date();
+      novaData.setDate(novaData.getDate() + 30);
+
+      const { error } = await supabase
+        .from("locadoras")
+        .update({
+          ativo: true,
+          bloqueio_parcial: false,
+          data_vencimento: novaData.toISOString().split("T")[0],
+        })
+        .eq("id", locadora.id);
+
+      if (error) {
+        toast.error("Erro ao dar baixa");
+        return;
+      }
+
+      toast.success("Pagamento confirmado!");
+      fetchPagamentos();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro inesperado");
+    }
+  }
 
   const hoje = new Date().toISOString().split("T")[0];
 
-  const filtered = locadoras.filter((l) =>
-    l.nome.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase();
 
-  const vencidas = filtered.filter((l) => l.data_vencimento && l.data_vencimento < hoje && l.ativo);
-  const emDia = filtered.filter((l) => !l.data_vencimento || l.data_vencimento >= hoje || !l.ativo);
+    return locadoras.filter((l) => {
+      return (
+        l.nome.toLowerCase().includes(term) ||
+        String(l.plano || "").toLowerCase().includes(term) ||
+        String(l.email || "").toLowerCase().includes(term)
+      );
+    });
+  }, [locadoras, search]);
+
+  function getStatusPagamento(locadora: LocadoraPagamento) {
+    if (!locadora.ativo) {
+      return { label: "Bloqueada", className: "bg-destructive/20 text-destructive" };
+    }
+
+    if (!locadora.data_vencimento) {
+      return { label: "Sem vencimento", className: "bg-muted text-muted-foreground" };
+    }
+
+    if (locadora.data_vencimento < hoje) {
+      return { label: "Vencido", className: "bg-destructive/20 text-destructive" };
+    }
+
+    const diff =
+      (new Date(locadora.data_vencimento + "T00:00:00").getTime() -
+        new Date(hoje + "T00:00:00").getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    if (diff <= 5) {
+      return { label: "Vencendo", className: "bg-yellow-500/20 text-yellow-600" };
+    }
+
+    return { label: "Em dia", className: "bg-success/20 text-success" };
+  }
+
+  if (checkingAccess) {
+    return (
+      <Layout>
+        <p className="p-8 text-muted-foreground">Validando acesso...</p>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
-      <div className="animate-fade-in space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Controle de Pagamentos</h1>
-          <p className="text-muted-foreground">Monitore os vencimentos das locadoras</p>
-        </div>
+      <div className="animate-fade-in space-y-8">
+        <h1 className="text-3xl font-bold">Pagamentos</h1>
 
-        <div className="relative">
-          <Search className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-          <Input className="rounded-[30px] pl-10" placeholder="Buscar locadora..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <Input
+          placeholder="Buscar..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-        {vencidas.length > 0 && (
-          <div className="rounded-[30px] border border-destructive/30 bg-destructive/5 p-6 space-y-3">
-            <h2 className="text-lg font-semibold text-destructive">Pagamentos Vencidos ({vencidas.length})</h2>
-            {vencidas.map((l) => (
-              <div key={l.id} className="flex items-center justify-between rounded-2xl bg-card p-4">
-                <div>
-                  <p className="font-medium text-foreground">{l.nome}</p>
-                  <p className="text-sm text-muted-foreground">{l.responsavel} • Plano: {l.plano}</p>
-                </div>
-                <div className="text-right">
-                  <Badge className="bg-destructive/20 text-destructive">Vencido</Badge>
-                  <p className="text-xs text-destructive mt-1">{l.data_vencimento}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="rounded-[30px] border bg-card p-6">
+          {loading ? (
+            <p>Carregando...</p>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((l) => {
+                const status = getStatusPagamento(l);
 
-        <div className="rounded-[30px] border border-border bg-card p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-foreground">Todas as Locadoras ({emDia.length})</h2>
-          {emDia.map((l) => (
-            <div key={l.id} className="flex items-center justify-between rounded-2xl bg-secondary p-4">
-              <div>
-                <p className="font-medium text-foreground">{l.nome}</p>
-                <p className="text-sm text-muted-foreground">{l.responsavel} • Plano: {l.plano}</p>
-              </div>
-              <div className="text-right">
-                <Badge className={l.ativo ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}>
-                  {l.ativo ? "Em dia" : "Bloqueada"}
-                </Badge>
-                {l.data_vencimento && <p className="text-xs text-muted-foreground mt-1">Vence: {l.data_vencimento}</p>}
-              </div>
+                return (
+                  <div
+                    key={l.id}
+                    className="flex items-center justify-between rounded-2xl bg-secondary p-4"
+                  >
+                    <div>
+                      <p className="font-medium">{l.nome}</p>
+                      <p className="text-sm">
+                        Plano: {l.plano} • Venc: {l.data_vencimento}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Badge className={status.className}>{status.label}</Badge>
+
+                      {/* 🔥 BOTÃO NOVO */}
+                      <Button
+                        size="sm"
+                        onClick={() => marcarComoPago(l)}
+                      >
+                        Pago
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-          {emDia.length === 0 && <p className="text-center text-muted-foreground py-4">Nenhuma locadora encontrada.</p>}
+          )}
         </div>
       </div>
     </Layout>

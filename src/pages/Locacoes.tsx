@@ -1,213 +1,443 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { LocacaoComCliente, DiaNaoCobrado } from "@/types";
-import { formatCurrency, formatDate, situacaoLabel, situacaoColor, calcularDiasCobrados, calcularValorTotal } from "@/lib/calculos";
+import {
+  formatCurrency,
+  formatDate,
+  situacaoLabel,
+  situacaoColor,
+  calcularDiasCobrados,
+} from "@/lib/calculos";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Search, CheckCircle, Printer, Pencil, XCircle } from "lucide-react";
+import {
+  Search,
+  Pencil,
+  FileText,
+  Trash2,
+  RefreshCcw,
+  Receipt,
+} from "lucide-react";
+import ActionGuard from "@/components/ActionGuard";
+import { useBillingAccess } from "@/hooks/useBillingAccess";
+import { DiaNaoCobrado } from "@/types";
+
+type ClienteLocacao = {
+  nome_completo?: string | null;
+};
+
+type ItemLocacao = {
+  id: string;
+  equipamento_id: string;
+  quantidade_locada: number | string;
+  valor_diaria_fechado?: number | string | null;
+  data_inicio_cobranca?: string | null;
+};
+
+type LocacaoListItem = {
+  id: string;
+  numero_contrato?: number | string | null;
+  situacao?: string | null;
+  data_inicio?: string | null;
+  data_previsao_entrega?: string | null;
+  valor_total_final?: number | string | null;
+  valor_total_pago?: number | string | null;
+  valor_desconto?: number | string | null;
+  taxa_entrega?: number | string | null;
+  cobrar_domingo?: boolean | null;
+  clientes?: ClienteLocacao | null;
+  itens_locacao?: ItemLocacao[] | null;
+};
 
 export default function LocacoesPage() {
-  const [locacoes, setLocacoes] = useState<LocacaoComCliente[]>([]);
-  const [feriados, setFeriados] = useState<DiaNaoCobrado[]>([]);
+  const navigate = useNavigate();
+  const { blockedByBilling } = useBillingAccess();
+
+  const [locacoes, setLocacoes] = useState<LocacaoListItem[]>([]);
   const [search, setSearch] = useState("");
-  const [baixaOpen, setBaixaOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [selectedLocacao, setSelectedLocacao] = useState<LocacaoComCliente | null>(null);
-  const [dataDevolucao, setDataDevolucao] = useState("");
-  const [valorAvaria, setValorAvaria] = useState(0);
+  const [filtro, setFiltro] = useState<"ativo" | "todos">("ativo");
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    void fetchLocacoes();
+  }, []);
 
-  async function fetchData() {
-    const [l, f] = await Promise.all([
-      supabase.from("locacoes").select("*, clientes(*), itens_locacao(*)").order("created_at", { ascending: false }),
-      supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
-    ]);
-    setLocacoes((l.data as LocacaoComCliente[]) || []);
-    setFeriados(f.data || []);
+  async function fetchLocacoes() {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("locacoes")
+        .select("*, clientes(*), itens_locacao(*)")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erro ao carregar locações:", error);
+        toast.error("Erro ao carregar locações");
+        return;
+      }
+
+      setLocacoes(((data as LocacaoListItem[]) || []).filter(Boolean));
+    } catch (error) {
+      console.error("Erro inesperado ao carregar locações:", error);
+      toast.error("Erro inesperado ao carregar locações");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function openBaixa(loc: LocacaoComCliente) {
-    setSelectedLocacao(loc);
-    setDataDevolucao("");
-    setValorAvaria(0);
-    setBaixaOpen(true);
+  function handleEdit(id: string) {
+    if (blockedByBilling) {
+      toast.error("Plano vencido. Não é possível editar locações.");
+      return;
+    }
+
+    navigate(`/alugueis/${id}/editar`);
   }
 
-  // Calculate preview values for baixa modal
-  const baixaPreview = (() => {
-    if (!selectedLocacao || !dataDevolucao) return null;
-    const diasReais = calcularDiasCobrados(
-      new Date(selectedLocacao.data_inicio + "T12:00:00"),
-      new Date(dataDevolucao + "T12:00:00"),
-      feriados,
-      selectedLocacao.cobrar_domingo
+  function handlePrintContract(id: string) {
+    navigate(`/alugueis/${id}/contrato`);
+  }
+
+  function handlePrintComprovante(id: string) {
+    navigate(`/alugueis/${id}/comprovante`);
+  }
+
+  async function handleRenew(locacao: LocacaoListItem) {
+    if (blockedByBilling) {
+      toast.error("Plano vencido. Não é possível renovar locações.");
+      return;
+    }
+
+    if (locacao.situacao !== "ativo") {
+      toast.error("Só é possível renovar locações ativas.");
+      return;
+    }
+
+    const novaData = window.prompt(
+      `Informe a nova data de devolução para a locação #${locacao.numero_contrato} (AAAA-MM-DD):`,
+      locacao.data_previsao_entrega || ""
     );
-    const valorCalculado = calcularValorTotal(
-      selectedLocacao.itens_locacao.map((i) => ({ quantidade_locada: i.quantidade_locada, valor_diaria_fechado: Number(i.valor_diaria_fechado) })),
-      diasReais,
-      Number(selectedLocacao.taxa_entrega),
-      Number(selectedLocacao.valor_desconto)
-    ) + valorAvaria;
-    const entrada = Number(selectedLocacao.valor_total_pago);
-    const saldo = valorCalculado - entrada;
-    return { diasReais, valorCalculado, entrada, saldo };
-  })();
 
-  async function handleBaixa() {
-    if (!selectedLocacao || !dataDevolucao || !baixaPreview) { toast.error("Preencha a data de devolução"); return; }
+    if (!novaData) return;
 
-    await supabase.from("locacoes").update({
-      data_devolucao_real: dataDevolucao,
-      valor_avaria: valorAvaria,
-      valor_total_final: baixaPreview.valorCalculado,
-      situacao: "finalizado",
-    }).eq("id", selectedLocacao.id);
-
-    for (const item of selectedLocacao.itens_locacao) {
-      const { data: eq } = await supabase.from("equipamentos").select("quantidade_disponivel").eq("id", item.equipamento_id).single();
-      if (eq) {
-        await supabase.from("equipamentos").update({
-          quantidade_disponivel: eq.quantidade_disponivel + item.quantidade_locada,
-        }).eq("id", item.equipamento_id);
-      }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(novaData)) {
+      toast.error("Data inválida. Use o formato AAAA-MM-DD.");
+      return;
     }
 
-    toast.success("Locação finalizada!");
-    setBaixaOpen(false);
-    fetchData();
-  }
-
-  async function handleCancel() {
-    if (!selectedLocacao) return;
-
-    // Return stock
-    for (const item of selectedLocacao.itens_locacao) {
-      const { data: eq } = await supabase.from("equipamentos").select("quantidade_disponivel").eq("id", item.equipamento_id).single();
-      if (eq) {
-        await supabase.from("equipamentos").update({
-          quantidade_disponivel: eq.quantidade_disponivel + item.quantidade_locada,
-        }).eq("id", item.equipamento_id);
-      }
+    if (!locacao.data_previsao_entrega || !locacao.data_inicio) {
+      toast.error("Locação sem datas válidas para renovação.");
+      return;
     }
 
-    await supabase.from("locacoes").update({ situacao: "cancelado" }).eq("id", selectedLocacao.id);
-    toast.success("Locação cancelada!");
-    setCancelOpen(false);
-    fetchData();
+    if (novaData <= locacao.data_previsao_entrega) {
+      toast.error("A nova data precisa ser maior que a data atual de devolução.");
+      return;
+    }
+
+    try {
+      setRenewingId(locacao.id);
+
+      const { data: diasData, error: diasError } = await supabase
+        .from("dias_nao_cobrados")
+        .select("*")
+        .eq("ativo", true);
+
+      if (diasError) {
+        console.error("Erro ao buscar dias não cobrados:", diasError);
+        toast.error("Erro ao calcular renovação");
+        return;
+      }
+
+      const diasNaoCobrados = (diasData as DiaNaoCobrado[]) || [];
+
+      const subtotalItens = (locacao.itens_locacao || []).reduce((acc, item) => {
+        const inicioItem = item.data_inicio_cobranca || locacao.data_inicio || "";
+        const dias = calcularDiasCobrados(
+          new Date(inicioItem + "T12:00:00"),
+          new Date(novaData + "T12:00:00"),
+          diasNaoCobrados,
+          !!locacao.cobrar_domingo
+        );
+
+        return (
+          acc +
+          Number(item.quantidade_locada || 0) *
+            Number(item.valor_diaria_fechado || 0) *
+            dias
+        );
+      }, 0);
+
+      const novoTotal =
+        subtotalItens +
+        Number(locacao.taxa_entrega || 0) -
+        Number(locacao.valor_desconto || 0);
+
+      const { error: updateError } = await supabase
+        .from("locacoes")
+        .update({
+          data_previsao_entrega: novaData,
+          valor_total_final: novoTotal,
+        })
+        .eq("id", locacao.id);
+
+      if (updateError) {
+        console.error("Erro ao renovar locação:", updateError);
+        toast.error("Erro ao renovar locação");
+        return;
+      }
+
+      toast.success("Locação renovada com sucesso!");
+      await fetchLocacoes();
+    } catch (error) {
+      console.error("Erro inesperado ao renovar locação:", error);
+      toast.error("Erro inesperado ao renovar locação");
+    } finally {
+      setRenewingId(null);
+    }
   }
 
-  const filtered = locacoes.filter((l) =>
-    (l.clientes?.nome_completo || "").toLowerCase().includes(search.toLowerCase()) ||
-    String(l.numero_contrato).includes(search)
-  );
+  async function handleDelete(locacao: LocacaoListItem) {
+    if (blockedByBilling) {
+      toast.error("Plano vencido. Não é possível excluir locações.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Deseja realmente excluir a locação #${locacao.numero_contrato ?? ""}?`
+    );
+
+    if (!confirmou) return;
+
+    try {
+      setDeletingId(locacao.id);
+
+      for (const item of locacao.itens_locacao || []) {
+        const { data: eq, error: eqError } = await supabase
+          .from("equipamentos")
+          .select("quantidade_disponivel")
+          .eq("id", item.equipamento_id)
+          .maybeSingle();
+
+        if (eqError) {
+          console.error("Erro ao consultar estoque:", eqError);
+          continue;
+        }
+
+        if (eq) {
+          const { error: estoqueError } = await supabase
+            .from("equipamentos")
+            .update({
+              quantidade_disponivel:
+                Number(eq.quantidade_disponivel) +
+                Number(item.quantidade_locada || 0),
+            })
+            .eq("id", item.equipamento_id);
+
+          if (estoqueError) {
+            console.error("Erro ao restaurar estoque:", estoqueError);
+          }
+        }
+      }
+
+      const { error: deleteItensError } = await supabase
+        .from("itens_locacao")
+        .delete()
+        .eq("locacao_id", locacao.id);
+
+      if (deleteItensError) {
+        console.error("Erro ao excluir itens da locação:", deleteItensError);
+        toast.error("Erro ao excluir itens da locação");
+        return;
+      }
+
+      const { error: deleteLocacaoError } = await supabase
+        .from("locacoes")
+        .delete()
+        .eq("id", locacao.id);
+
+      if (deleteLocacaoError) {
+        console.error("Erro ao excluir locação:", deleteLocacaoError);
+        toast.error("Erro ao excluir locação");
+        return;
+      }
+
+      toast.success("Locação excluída com sucesso!");
+      await fetchLocacoes();
+    } catch (error) {
+      console.error("Erro inesperado ao excluir locação:", error);
+      toast.error("Erro inesperado ao excluir locação");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase();
+
+    return locacoes.filter((l) => {
+      const matchBusca =
+        String(l.numero_contrato ?? "").toLowerCase().includes(term) ||
+        (l.clientes?.nome_completo || "").toLowerCase().includes(term) ||
+        String(l.situacao ?? "").toLowerCase().includes(term);
+
+      const matchFiltro = filtro === "todos" ? true : l.situacao === "ativo";
+
+      return matchBusca && matchFiltro;
+    });
+  }, [locacoes, search, filtro]);
 
   return (
     <Layout>
       <div className="animate-fade-in space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Locações</h1>
-            <p className="text-muted-foreground">Gerencie todas as locações</p>
-          </div>
-          <Link to="/novo-aluguel"><Button className="rounded-[30px] gap-2">Novo Aluguel</Button></Link>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Aluguéis</h1>
+          <p className="text-muted-foreground">
+            Gerencie as locações da sua locadora
+          </p>
         </div>
 
         <div className="relative">
           <Search className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-          <Input className="rounded-[30px] pl-10" placeholder="Buscar por cliente ou contrato..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            className="rounded-[30px] pl-10"
+            placeholder="Buscar por contrato, cliente ou situação..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={filtro === "ativo" ? "default" : "outline"}
+            className="rounded-[30px]"
+            onClick={() => setFiltro("ativo")}
+          >
+            Em aberto
+          </Button>
+
+          <Button
+            type="button"
+            variant={filtro === "todos" ? "default" : "outline"}
+            className="rounded-[30px]"
+            onClick={() => setFiltro("todos")}
+          >
+            Todos
+          </Button>
         </div>
 
         <div className="space-y-3">
-          {filtered.map((l) => (
-            <div key={l.id} className="rounded-[30px] border border-border bg-card p-5 transition-all hover:border-primary/30">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <p className="font-semibold text-foreground">#{l.numero_contrato}</p>
-                    <Badge className={situacaoColor(l.situacao)}>{situacaoLabel(l.situacao)}</Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{l.clientes?.nome_completo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(l.data_inicio)} → {formatDate(l.data_previsao_entrega)} | {formatCurrency(Number(l.valor_total_final))}
-                    {Number(l.valor_total_pago) > 0 && <span className="text-success"> (Entrada: {formatCurrency(Number(l.valor_total_pago))})</span>}
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  <Link to={`/locacoes/${l.id}/contrato`}>
-                    <Button variant="ghost" size="icon" className="rounded-full"><Printer className="h-4 w-4" /></Button>
-                  </Link>
-                  {l.situacao === "ativo" && (
-                    <>
-                      <Link to={`/alugueis/${l.id}/editar`}>
-                        <Button variant="ghost" size="icon" className="rounded-full"><Pencil className="h-4 w-4" /></Button>
-                      </Link>
-                      <Button variant="ghost" size="icon" className="rounded-full text-success" onClick={() => openBaixa(l)}>
-                        <CheckCircle className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="rounded-full text-destructive" onClick={() => { setSelectedLocacao(l); setCancelOpen(true); }}>
-                        <XCircle className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhuma locação encontrada.</p>}
-        </div>
+          {loading ? (
+            <p className="py-8 text-center text-muted-foreground">Carregando...</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">
+              Nenhuma locação encontrada.
+            </p>
+          ) : (
+            filtered.map((l) => (
+              <div
+                key={l.id}
+                className="rounded-[30px] border border-border bg-card p-5 transition-all hover:border-primary/30"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <p className="font-semibold text-foreground">
+                        #{l.numero_contrato ?? "-"}
+                      </p>
 
-        {/* Modal de Baixa */}
-        <Dialog open={baixaOpen} onOpenChange={setBaixaOpen}>
-          <DialogContent className="rounded-[30px] border-border bg-card sm:max-w-md">
-            <DialogHeader><DialogTitle className="text-foreground">Dar Baixa na Locação #{selectedLocacao?.numero_contrato}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
-              <div><Label className="text-foreground">Data Real de Devolução</Label><Input className="rounded-[30px]" type="date" value={dataDevolucao} onChange={(e) => setDataDevolucao(e.target.value)} /></div>
-              <div><Label className="text-foreground">Valor de Avarias (R$)</Label><Input className="rounded-[30px]" type="number" step="0.01" value={valorAvaria} onChange={(e) => setValorAvaria(parseFloat(e.target.value) || 0)} /></div>
+                      <Badge className={situacaoColor(l.situacao ?? "")}>
+                        {situacaoLabel(l.situacao ?? "")}
+                      </Badge>
+                    </div>
 
-              {baixaPreview && (
-                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-2 text-sm">
-                  <p className="font-semibold text-foreground">Resumo da Baixa:</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    <p className="text-muted-foreground">Dias cobrados:</p><p className="text-right font-bold text-foreground">{baixaPreview.diasReais}</p>
-                    <p className="text-muted-foreground">Valor calculado:</p><p className="text-right font-bold text-foreground">{formatCurrency(baixaPreview.valorCalculado)}</p>
-                    <p className="text-muted-foreground">Entrada paga:</p><p className="text-right font-bold text-success">{formatCurrency(baixaPreview.entrada)}</p>
-                    <p className="text-muted-foreground font-bold">Saldo a cobrar:</p>
-                    <p className={`text-right text-lg font-bold ${baixaPreview.saldo <= 0 ? "text-success" : "text-destructive"}`}>
-                      {baixaPreview.saldo <= 0 ? "ZERADO" : formatCurrency(baixaPreview.saldo)}
+                    <p className="text-sm text-muted-foreground">
+                      Cliente: {l.clientes?.nome_completo || "Sem cliente"}
                     </p>
+
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(l.data_inicio || "")} →{" "}
+                      {formatDate(l.data_previsao_entrega || "")}
+                    </p>
+
+                    <p className="text-sm text-muted-foreground">
+                      Total: {formatCurrency(Number(l.valor_total_final || 0))}
+                    </p>
+
+                    {Number(l.valor_total_pago || 0) > 0 && (
+                      <p className="text-sm text-success">
+                        Entrada: {formatCurrency(Number(l.valor_total_pago || 0))}
+                      </p>
+                    )}
+
+                    {!!l.itens_locacao?.length && (
+                      <p className="text-xs text-muted-foreground">
+                        Itens: {l.itens_locacao.length}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <ActionGuard fallbackLabel="Edição bloqueada">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => handleEdit(l.id)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </ActionGuard>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handlePrintContract(l.id)}
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handlePrintComprovante(l.id)}
+                    >
+                      <Receipt className="h-4 w-4" />
+                    </Button>
+
+                    <ActionGuard fallbackLabel="Renovação bloqueada">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => handleRenew(l)}
+                        disabled={renewingId === l.id}
+                      >
+                        <RefreshCcw className="h-4 w-4" />
+                      </Button>
+                    </ActionGuard>
+
+                    <ActionGuard fallbackLabel="Exclusão bloqueada">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => handleDelete(l)}
+                        disabled={deletingId === l.id}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </ActionGuard>
                   </div>
                 </div>
-              )}
-
-              <Button className="w-full rounded-[30px]" onClick={handleBaixa}>Finalizar Locação</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Cancelamento */}
-        <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-          <DialogContent className="rounded-[30px] border-border bg-card sm:max-w-md">
-            <DialogHeader><DialogTitle className="text-foreground">Cancelar Locação #{selectedLocacao?.numero_contrato}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Tem certeza que deseja cancelar esta locação? Os equipamentos serão devolvidos ao estoque.
-              </p>
-              <p className="text-sm text-foreground font-medium">Cliente: {selectedLocacao?.clientes?.nome_completo}</p>
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1 rounded-[30px]" onClick={() => setCancelOpen(false)}>Não, manter</Button>
-                <Button variant="destructive" className="flex-1 rounded-[30px]" onClick={handleCancel}>Sim, cancelar</Button>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            ))
+          )}
+        </div>
       </div>
     </Layout>
   );

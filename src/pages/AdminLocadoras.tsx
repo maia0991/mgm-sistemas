@@ -1,195 +1,608 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Ban, CheckCircle, Building2 } from "lucide-react";
+import {
+  Pencil,
+  Ban,
+  CheckCircle,
+  Plus,
+  X,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 
 interface Locadora {
   id: string;
   nome: string;
-  cnpj: string;
-  responsavel: string;
-  telefone: string;
-  email: string;
-  endereco: string;
-  plano: string;
   ativo: boolean;
-  data_vencimento: string | null;
-  notas: string;
-  created_at: string;
+  bloqueio_parcial?: boolean | null;
+  plano?: string | null;
+  data_vencimento?: string | null;
+  email?: string | null;
+  telefone?: string | null;
 }
 
-const emptyForm = {
-  nome: "", cnpj: "", responsavel: "", telefone: "", email: "", endereco: "", plano: "basico", data_vencimento: "", notas: "",
+const initialForm = {
+  nome: "",
+  email: "",
+  telefone: "",
+  plano: "",
+  data_vencimento: "",
+  senha: "",
 };
 
 export default function AdminLocadorasPage() {
+  const navigate = useNavigate();
+
   const [locadoras, setLocadoras] = useState<Locadora[]>([]);
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [senhaLocadora, setSenhaLocadora] = useState("");
+  const [loadingList, setLoadingList] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
-  useEffect(() => { fetchLocadoras(); }, []);
+  const [openModal, setOpenModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<Locadora | null>(null);
+  const [form, setForm] = useState(initialForm);
 
-  async function fetchLocadoras() {
-    const { data } = await supabase.from("locadoras").select("*").order("nome");
-    setLocadoras(data || []);
-  }
+  useEffect(() => {
+    void checkAccessAndLoad();
+  }, []);
 
-  function resetForm() { setForm(emptyForm); setEditingId(null); setSenhaLocadora(""); }
+  async function checkAccessAndLoad() {
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
 
-  async function handleSave() {
-    if (!form.nome.trim()) { toast.error("Nome é obrigatório"); return; }
-
-    if (editingId) {
-      await supabase.from("locadoras").update({
-        nome: form.nome, cnpj: form.cnpj, responsavel: form.responsavel,
-        telefone: form.telefone, email: form.email, endereco: form.endereco,
-        plano: form.plano, data_vencimento: form.data_vencimento || null, notas: form.notas,
-      }).eq("id", editingId);
-      toast.success("Locadora atualizada!");
-    } else {
-      if (!form.email.trim() || !senhaLocadora.trim()) {
-        toast.error("Email e senha são obrigatórios para criar acesso");
+      if (authError || !authData.user) {
+        navigate("/login", { replace: true });
         return;
       }
 
-      // Create locadora record
-      const { data: locadora, error: locErr } = await supabase.from("locadoras").insert({
-        nome: form.nome, cnpj: form.cnpj, responsavel: form.responsavel,
-        telefone: form.telefone, email: form.email, endereco: form.endereco,
-        plano: form.plano, data_vencimento: form.data_vencimento || null, notas: form.notas,
-      }).select().single();
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
 
-      if (locErr || !locadora) { toast.error("Erro ao criar locadora"); return; }
+      if (roleError) {
+        toast.error("Erro ao validar acesso");
+        navigate("/", { replace: true });
+        return;
+      }
 
-      // Create user account via edge function
-      const { error: authErr } = await supabase.functions.invoke("create-locadora-user", {
-        body: { email: form.email, password: senhaLocadora, nome: form.nome, locadora_id: locadora.id },
-      });
+      if (roleData?.role !== "admin") {
+        toast.error("Acesso restrito ao administrador");
+        navigate("/", { replace: true });
+        return;
+      }
 
-      if (authErr) {
-        toast.error("Locadora criada mas erro ao criar acesso: " + authErr.message);
-      } else {
-        toast.success(`Locadora "${form.nome}" criada com acesso!`);
+      await fetchLocadoras();
+    } catch (error) {
+      console.error("Erro ao validar acesso:", error);
+      navigate("/", { replace: true });
+    } finally {
+      setCheckingAccess(false);
+    }
+  }
+
+  async function fetchLocadoras() {
+    try {
+      setLoadingList(true);
+
+      const { data, error } = await supabase
+        .from("locadoras")
+        .select(
+          "id, nome, ativo, bloqueio_parcial, plano, data_vencimento, email, telefone"
+        )
+        .order("nome");
+
+      if (error) {
+        console.error("Erro ao carregar locadoras:", error);
+        toast.error("Erro ao carregar locadoras");
+        return;
+      }
+
+      setLocadoras((data as Locadora[]) || []);
+    } catch (error) {
+      console.error("Erro ao carregar locadoras:", error);
+      toast.error("Erro inesperado ao carregar locadoras");
+    } finally {
+      setLoadingList(false);
+    }
+  }
+
+  function openCreateModal() {
+    setEditing(null);
+    setForm(initialForm);
+    setOpenModal(true);
+  }
+
+  function handleEdit(locadora: Locadora) {
+    setEditing(locadora);
+
+    setForm({
+      nome: locadora.nome || "",
+      email: locadora.email || "",
+      telefone: locadora.telefone || "",
+      plano: locadora.plano || "",
+      data_vencimento: locadora.data_vencimento || "",
+      senha: "",
+    });
+
+    setOpenModal(true);
+  }
+
+  function closeModal() {
+    setOpenModal(false);
+    setEditing(null);
+    setForm(initialForm);
+  }
+
+  async function salvarLocadora() {
+    if (!form.nome.trim()) {
+      toast.error("Informe o nome da locadora");
+      return;
+    }
+
+    if (!editing) {
+      if (!form.email.trim()) {
+        toast.error("Informe o email de login da locadora");
+        return;
+      }
+
+      if (!form.senha.trim()) {
+        toast.error("Informe a senha inicial da locadora");
+        return;
+      }
+
+      if (form.senha.trim().length < 6) {
+        toast.error("A senha inicial deve ter pelo menos 6 caracteres");
+        return;
       }
     }
 
-    resetForm();
-    setOpen(false);
-    fetchLocadoras();
+    try {
+      setSaving(true);
+
+      if (editing) {
+        const { error } = await supabase
+          .from("locadoras")
+          .update({
+            nome: form.nome.trim(),
+            email: form.email.trim() || null,
+            telefone: form.telefone.trim() || null,
+            plano: form.plano.trim() || null,
+            data_vencimento: form.data_vencimento || null,
+          })
+          .eq("id", editing.id);
+
+        if (error) {
+          console.error("Erro ao atualizar locadora:", error);
+          toast.error("Erro ao atualizar locadora");
+          return;
+        }
+
+        toast.success("Locadora atualizada com sucesso!");
+      } else {
+        const { data, error } = await supabase.functions.invoke(
+          "create-locadora-user",
+          {
+            body: {
+              nome: form.nome.trim(),
+              email: form.email.trim(),
+              telefone: form.telefone.trim() || null,
+              plano: form.plano.trim() || null,
+              data_vencimento: form.data_vencimento || null,
+              password: form.senha.trim(),
+            },
+          }
+        );
+
+        if (error) {
+          console.error("Erro bruto ao criar locadora:", error);
+
+          let mensagem = "Erro ao criar locadora";
+
+          try {
+            const context = (error as any)?.context;
+
+            if (context) {
+              const text = await context.text();
+              const json = JSON.parse(text);
+
+              if (json?.error) {
+                mensagem = json.error;
+              }
+            }
+          } catch (parseError) {
+            console.error(parseError);
+          }
+
+          toast.error(mensagem);
+          return;
+        }
+
+        if (data?.error) {
+          toast.error(data.error);
+          return;
+        }
+
+        toast.success("Locadora criada com sucesso!");
+      }
+
+      closeModal();
+      await fetchLocadoras();
+    } catch (error) {
+      console.error("Erro ao salvar locadora:", error);
+      toast.error("Erro inesperado ao salvar locadora");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleAtivo(loc: Locadora) {
-    await supabase.from("locadoras").update({ ativo: !loc.ativo }).eq("id", loc.id);
-    toast.success(loc.ativo ? "Locadora bloqueada!" : "Locadora desbloqueada!");
-    fetchLocadoras();
+    try {
+      const { error } = await supabase
+        .from("locadoras")
+        .update({ ativo: !loc.ativo })
+        .eq("id", loc.id);
+
+      if (error) {
+        console.error("Erro ao alterar status:", error);
+        toast.error("Erro ao alterar status");
+        return;
+      }
+
+      toast.success(
+        loc.ativo
+          ? "Locadora bloqueada totalmente!"
+          : "Locadora desbloqueada!"
+      );
+
+      await fetchLocadoras();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro inesperado");
+    }
   }
 
-  function handleEdit(l: Locadora) {
-    setForm({
-      nome: l.nome, cnpj: l.cnpj || "", responsavel: l.responsavel || "",
-      telefone: l.telefone || "", email: l.email || "", endereco: l.endereco || "",
-      plano: l.plano, data_vencimento: l.data_vencimento || "", notas: l.notas || "",
-    });
-    setEditingId(l.id);
-    setOpen(true);
+  async function toggleBloqueioParcial(loc: Locadora) {
+    try {
+      const { error } = await supabase
+        .from("locadoras")
+        .update({
+          bloqueio_parcial: !loc.bloqueio_parcial,
+        })
+        .eq("id", loc.id);
+
+      if (error) {
+        console.error("Erro bloqueio parcial:", error);
+        toast.error("Erro ao alterar bloqueio parcial");
+        return;
+      }
+
+      toast.success(
+        loc.bloqueio_parcial
+          ? "Bloqueio parcial removido!"
+          : "Bloqueio parcial ativado!"
+      );
+
+      await fetchLocadoras();
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro inesperado");
+    }
+  }
+
+  async function handleDeleteLocadora(loc: Locadora) {
+    const confirmou = window.confirm(
+      `Deseja realmente apagar a locadora "${loc.nome}"?\n\nEssa ação não pode ser desfeita.`
+    );
+
+    if (!confirmou) return;
+
+    try {
+      const { error } = await supabase
+        .from("locadoras")
+        .delete()
+        .eq("id", loc.id);
+
+      if (error) {
+        console.error("Erro ao apagar locadora:", error);
+        toast.error("Erro ao apagar locadora");
+        return;
+      }
+
+      toast.success("Locadora apagada com sucesso!");
+
+      await fetchLocadoras();
+    } catch (error) {
+      console.error("Erro inesperado ao apagar:", error);
+      toast.error("Erro inesperado ao apagar");
+    }
   }
 
   const filtered = locadoras.filter((l) =>
-    l.nome.toLowerCase().includes(search.toLowerCase()) ||
-    (l.cnpj || "").includes(search)
+    l.nome.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (checkingAccess) {
+    return (
+      <Layout>
+        <p className="p-8 text-muted-foreground">Validando acesso...</p>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
-      <div className="animate-fade-in space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Locadoras</h1>
-            <p className="text-muted-foreground">Gerencie as empresas clientes do MGM Sistemas</p>
-          </div>
-          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button className="rounded-[30px] gap-2"><Plus className="h-4 w-4" /> Nova Locadora</Button>
-            </DialogTrigger>
-            <DialogContent className="rounded-[30px] border-border bg-card sm:max-w-lg max-h-[90vh] overflow-auto">
-              <DialogHeader><DialogTitle className="text-foreground">{editingId ? "Editar" : "Nova"} Locadora</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div><Label className="text-foreground">Nome da Empresa *</Label><Input className="rounded-[30px]" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label className="text-foreground">CNPJ</Label><Input className="rounded-[30px]" value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: e.target.value })} /></div>
-                  <div><Label className="text-foreground">Responsável</Label><Input className="rounded-[30px]" value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label className="text-foreground">Telefone</Label><Input className="rounded-[30px]" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
-                  <div><Label className="text-foreground">Email *</Label><Input className="rounded-[30px]" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                </div>
-                <div><Label className="text-foreground">Endereço</Label><Input className="rounded-[30px]" value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label className="text-foreground">Plano</Label><Input className="rounded-[30px]" value={form.plano} onChange={(e) => setForm({ ...form, plano: e.target.value })} /></div>
-                  <div><Label className="text-foreground">Vencimento</Label><Input className="rounded-[30px]" type="date" value={form.data_vencimento} onChange={(e) => setForm({ ...form, data_vencimento: e.target.value })} /></div>
-                </div>
-                {!editingId && (
-                  <div className="border-t border-border pt-4">
-                    <Label className="text-foreground font-semibold">Senha de Acesso *</Label>
-                    <Input className="rounded-[30px] mt-1" type="password" placeholder="Senha para a locadora acessar o sistema" value={senhaLocadora} onChange={(e) => setSenhaLocadora(e.target.value)} />
-                  </div>
-                )}
-                <div><Label className="text-foreground">Observações</Label><Input className="rounded-[30px]" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} /></div>
-                <Button className="w-full rounded-[30px]" onClick={handleSave}>{editingId ? "Atualizar" : "Cadastrar"}</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <h1 className="text-3xl font-bold">Locadoras</h1>
+
+          <Button type="button" onClick={openCreateModal}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Locadora
+          </Button>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
-          <Input className="rounded-[30px] pl-10" placeholder="Buscar locadora..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <Input
+          placeholder="Buscar..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-        <div className="space-y-3">
-          {filtered.map((l) => (
-            <div key={l.id} className="rounded-[30px] border border-border bg-card p-5 transition-all hover:border-primary/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="rounded-2xl bg-primary/10 p-2.5"><Building2 className="h-5 w-5 text-primary" /></div>
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <p className="font-semibold text-foreground">{l.nome}</p>
-                      <Badge className={l.ativo ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"}>
-                        {l.ativo ? "Ativa" : "Bloqueada"}
-                      </Badge>
-                      {l.plano && <Badge variant="outline" className="text-xs">{l.plano}</Badge>}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{l.cnpj || "Sem CNPJ"} • {l.responsavel || "—"} • {l.telefone || "—"}</p>
-                    {l.data_vencimento && (
-                      <p className={`text-xs ${l.data_vencimento < new Date().toISOString().split("T")[0] ? "text-destructive" : "text-muted-foreground"}`}>
-                        Vencimento: {l.data_vencimento}
-                      </p>
-                    )}
-                  </div>
+        {loadingList ? (
+          <p>Carregando...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-muted-foreground">
+            Nenhuma locadora encontrada.
+          </p>
+        ) : (
+          filtered.map((l) => (
+            <div key={l.id} className="space-y-3 rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="font-semibold">{l.nome}</p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Status login: {l.ativo ? "Ativa" : "Bloqueada"}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Bloqueio parcial:{" "}
+                    {l.bloqueio_parcial ? "Ativado" : "Desligado"}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Plano: {l.plano || "—"}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Vencimento: {l.data_vencimento || "—"}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Email: {l.email || "—"}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    Telefone: {l.telefone || "—"}
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="rounded-full" onClick={() => handleEdit(l)}>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => handleEdit(l)}
+                    title="Editar"
+                  >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className={`rounded-full ${l.ativo ? "text-destructive" : "text-success"}`} onClick={() => toggleAtivo(l)}>
-                    {l.ativo ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => toggleBloqueioParcial(l)}
+                    title={
+                      l.bloqueio_parcial
+                        ? "Remover bloqueio parcial"
+                        : "Ativar bloqueio parcial"
+                    }
+                  >
+                    {l.bloqueio_parcial ? (
+                      <ShieldCheck className="h-4 w-4" />
+                    ) : (
+                      <ShieldAlert className="h-4 w-4" />
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => toggleAtivo(l)}
+                    title={l.ativo ? "Bloqueio total" : "Desbloquear login"}
+                  >
+                    {l.ativo ? (
+                      <Ban className="h-4 w-4" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => handleDeleteLocadora(l)}
+                    title="Apagar locadora"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => toggleBloqueioParcial(l)}
+                >
+                  {l.bloqueio_parcial
+                    ? "Remover bloqueio parcial"
+                    : "Ativar bloqueio parcial"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={l.ativo ? "destructive" : "outline"}
+                  onClick={() => toggleAtivo(l)}
+                >
+                  {l.ativo ? "Bloqueio total" : "Desbloquear login"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => handleDeleteLocadora(l)}
+                >
+                  Apagar Locadora
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+
+        {openModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-card p-6 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold">
+                  {editing ? "Editar Locadora" : "Nova Locadora"}
+                </h2>
+
+                <Button type="button" variant="ghost" onClick={closeModal}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nome</Label>
+
+                  <Input
+                    value={form.nome}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        nome: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Email de login</Label>
+
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        email: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                {!editing && (
+                  <div className="space-y-2">
+                    <Label>Senha inicial</Label>
+
+                    <Input
+                      type="password"
+                      value={form.senha}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          senha: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+
+                  <Input
+                    value={form.telefone}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        telefone: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Plano</Label>
+
+                  <Input
+                    value={form.plano}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        plano: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Data de vencimento</Label>
+
+                  <Input
+                    type="date"
+                    value={form.data_vencimento}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        data_vencimento: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeModal}
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button
+                    type="button"
+                    onClick={salvarLocadora}
+                    disabled={saving}
+                  >
+                    {saving ? "Salvando..." : "Salvar"}
                   </Button>
                 </div>
               </div>
             </div>
-          ))}
-          {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhuma locadora encontrada.</p>}
-        </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
