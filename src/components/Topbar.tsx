@@ -18,6 +18,8 @@ import {
   Shield,
   CreditCard,
   AlertTriangle,
+  Menu,
+  X,
 } from "lucide-react";
 
 type MenuLink = {
@@ -99,6 +101,7 @@ export default function Topbar() {
 
   const [nomeEmpresa, setNomeEmpresa] = useState("MGM Sistemas");
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     async function fetchNomeEmpresa() {
@@ -131,6 +134,10 @@ export default function Topbar() {
     void fetchNomeEmpresa();
   }, [role, perfil?.locadora_id]);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   const isAdmin = role === "admin";
 
   const menus = isAdmin
@@ -146,9 +153,9 @@ export default function Topbar() {
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-background">
-      <div className="flex h-20 items-center justify-between px-6">
-        <Link to={homeLink} className="flex items-center gap-3">
-          <div className="bg-primary flex h-10 w-10 items-center justify-center overflow-hidden rounded-full font-bold text-white">
+      <div className="flex h-20 items-center justify-between gap-3 px-4 md:px-6">
+        <Link to={homeLink} className="flex min-w-0 items-center gap-3">
+          <div className="bg-primary flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full font-bold text-white">
             {temLogo ? (
               <img
                 src={`${logoEmpresa}?v=${encodeURIComponent(logoEmpresa || "")}`}
@@ -160,8 +167,10 @@ export default function Topbar() {
             )}
           </div>
 
-          <div>
-            <p className="max-w-[220px] truncate font-bold">{tituloSistema}</p>
+          <div className="min-w-0">
+            <p className="max-w-[190px] truncate font-bold md:max-w-[260px]">
+              {tituloSistema}
+            </p>
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
         </Link>
@@ -200,14 +209,67 @@ export default function Topbar() {
           ))}
         </nav>
 
-        <button
-          onClick={signOut}
-          className="flex items-center gap-2 text-sm text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-          Sair
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileOpen((prev) => !prev)}
+            className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold lg:hidden"
+          >
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            Menu
+          </button>
+
+          <button
+            onClick={signOut}
+            className="hidden items-center gap-2 text-sm text-destructive sm:flex"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
+        </div>
       </div>
+
+      {mobileOpen && (
+        <div className="max-h-[calc(100vh-80px)] overflow-auto border-t border-border bg-background px-4 py-4 lg:hidden">
+          <div className="space-y-4">
+            {menus.map((menu) => (
+              <div key={menu.label} className="rounded-2xl border border-border bg-card p-3">
+                <p className="mb-2 text-sm font-bold text-foreground">
+                  {menu.label}
+                </p>
+
+                <div className="space-y-1">
+                  {menu.links.map((link) => {
+                    const active = location.pathname === link.to;
+                    const Icon = link.icon;
+
+                    return (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${
+                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                        }`}
+                      >
+                        {Icon ? <Icon className="h-4 w-4" /> : null}
+                        {link.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={signOut}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 px-4 py-3 text-sm font-semibold text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
