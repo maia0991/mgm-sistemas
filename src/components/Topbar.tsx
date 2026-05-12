@@ -146,7 +146,7 @@ export default function Topbar() {
     ? clienteMenusBloqueioParcial
     : clienteMenus;
 
-  const homeLink = isAdmin ? "/admin-dashboard" : "/";
+  const homeLink = isAdmin ? "/admin-dashboard" : "/app";
   const subtitle = isAdmin ? "Painel Administrativo" : "Gestão de Locações";
   const tituloSistema = isAdmin ? "MGM Sistemas" : nomeEmpresa;
   const temLogo = !!logoEmpresa && logoEmpresa.trim() !== "";

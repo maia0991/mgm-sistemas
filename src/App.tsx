@@ -4,6 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+
+import LandingPage from "./pages/LandingPage.tsx";
+
 import Index from "./pages/Index.tsx";
 import Login from "./pages/Login.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
@@ -39,11 +42,17 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+
+            {/* SITE */}
+            <Route path="/" element={<LandingPage />} />
+
+            {/* LOGIN */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/mgm-admin" element={<AdminLoginPage />} />
             <Route path="/admin" element={<Navigate to="/login" replace />} />
 
+            {/* ADMIN */}
             <Route
               path="/admin-dashboard"
               element={
@@ -52,6 +61,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/admin-locadoras"
               element={
@@ -60,6 +70,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/admin-pagamentos"
               element={
@@ -69,14 +80,16 @@ const App = () => (
               }
             />
 
+            {/* SISTEMA */}
             <Route
-              path="/"
+              path="/app"
               element={
                 <ProtectedRoute allowedRoles={["locadora"]}>
                   <Index />
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/produtos"
               element={
@@ -85,6 +98,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/clientes"
               element={
@@ -93,6 +107,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/novo-aluguel"
               element={
@@ -101,6 +116,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/alugueis"
               element={
@@ -112,6 +128,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/alugueis/:id/editar"
               element={
@@ -120,6 +137,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/alugueis/:id/contrato"
               element={
@@ -131,6 +149,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/alugueis/:id/comprovante"
               element={
@@ -142,6 +161,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/devolucao"
               element={
@@ -153,6 +173,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/financeiro"
               element={
@@ -161,6 +182,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/dias-nao-cobrados"
               element={
@@ -169,6 +191,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/relatorios"
               element={
@@ -177,6 +200,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/backup"
               element={
@@ -185,6 +209,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/configuracoes"
               element={
@@ -193,6 +218,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/perfil-empresa"
               element={
@@ -213,6 +239,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/locacoes/:id/comprovante"
               element={
@@ -225,18 +252,22 @@ const App = () => (
               }
             />
 
+            {/* REDIRECTS */}
             <Route
               path="/equipamentos"
               element={<Navigate to="/produtos" replace />}
             />
+
             <Route
               path="/locacoes"
               element={<Navigate to="/alugueis" replace />}
             />
+
             <Route
               path="/locacoes/nova"
               element={<Navigate to="/novo-aluguel" replace />}
             />
+
             <Route
               path="/feriados"
               element={<Navigate to="/dias-nao-cobrados" replace />}
