@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate } from "@/lib/calculos";
-import StatCard from "@/components/StatCard";
 import Layout from "@/components/Layout";
 import {
   DollarSign,
@@ -47,9 +46,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const [locacoes, setLocacoes] = useState<LocacaoDashboardItem[]>([]);
-  const [equipamentos, setEquipamentos] = useState<EquipamentoDashboardItem[]>(
-    []
-  );
+  const [equipamentos, setEquipamentos] = useState<EquipamentoDashboardItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,7 +62,6 @@ export default function Dashboard() {
           .from("locacoes")
           .select("*, clientes(*), itens_locacao(*)")
           .order("created_at", { ascending: false }),
-
         supabase
           .from("equipamentos")
           .select("*")
@@ -85,14 +81,8 @@ export default function Dashboard() {
         return;
       }
 
-      setLocacoes(
-        ((locacoesRes.data as LocacaoDashboardItem[]) || []).filter(Boolean)
-      );
-      setEquipamentos(
-        ((equipamentosRes.data as EquipamentoDashboardItem[]) || []).filter(
-          Boolean
-        )
-      );
+      setLocacoes(((locacoesRes.data as LocacaoDashboardItem[]) || []).filter(Boolean));
+      setEquipamentos(((equipamentosRes.data as EquipamentoDashboardItem[]) || []).filter(Boolean));
     } catch (error) {
       console.error("Erro inesperado:", error);
       toast.error("Erro inesperado");
@@ -227,7 +217,6 @@ export default function Dashboard() {
     );
 
     const dataFormatada = formatDate(dataEntrega);
-
     const prefixo = "🤖 *Aviso automático - MGM Sistemas*\n\n";
 
     if (diffDias < 0) {
@@ -289,51 +278,137 @@ Estamos à disposição!`;
   return (
     <Layout>
       <div className="animate-fade-in space-y-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-            <p className="mt-1 text-muted-foreground">
-              Visão geral do MGM Sistemas
-            </p>
+        <div className="relative overflow-hidden rounded-[35px] border border-border bg-gradient-to-br from-primary/20 via-background to-background p-8">
+          <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+
+          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-primary">
+                MGM Sistemas
+              </p>
+
+              <h1 className="text-4xl font-black tracking-tight text-foreground">
+                Dashboard
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-muted-foreground">
+                Controle sua locadora com mais organização, rapidez e segurança.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => navigate("/novo-aluguel")}
+                className="rounded-[30px] px-6"
+              >
+                Novo Aluguel
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={goToDevolucao}
+                className="gap-2 rounded-[30px] px-6"
+              >
+                <ArrowDownToLine className="h-4 w-4" />
+                Dar Baixa
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <div className="relative overflow-hidden rounded-[30px] border border-green-500/20 bg-gradient-to-br from-green-500/10 to-background p-6">
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
+            <div className="relative z-10">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/15">
+                <DollarSign className="h-7 w-7 text-green-500" />
+              </div>
+              <p className="text-sm text-muted-foreground">Faturamento Total</p>
+              <h2 className="mt-2 text-3xl font-black">
+                {formatCurrency(faturamento)}
+              </h2>
+            </div>
           </div>
 
-          <Button onClick={goToDevolucao} className="gap-2 rounded-[30px]">
-            <ArrowDownToLine className="h-4 w-4" />
-            Baixa
-          </Button>
+          <div className="relative overflow-hidden rounded-[30px] border border-primary/20 bg-gradient-to-br from-primary/10 to-background p-6">
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+            <div className="relative z-10">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15">
+                <FileText className="h-7 w-7 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Locações Ativas</p>
+              <h2 className="mt-2 text-3xl font-black">{ativas.length}</h2>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[30px] border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-background p-6">
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-yellow-500/10 blur-2xl" />
+            <div className="relative z-10">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-500/15">
+                <TruckIcon className="h-7 w-7 text-yellow-500" />
+              </div>
+              <p className="text-sm text-muted-foreground">Saídas Hoje</p>
+              <h2 className="mt-2 text-3xl font-black">{saidasHoje.length}</h2>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[30px] border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-background p-6">
+            <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-cyan-500/10 blur-2xl" />
+            <div className="relative z-10">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/15">
+                <ArrowDownToLine className="h-7 w-7 text-cyan-500" />
+              </div>
+              <p className="text-sm text-muted-foreground">Retornos Hoje</p>
+              <h2 className="mt-2 text-3xl font-black">{retornosHoje.length}</h2>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Faturamento Total"
-            value={formatCurrency(faturamento)}
-            icon={DollarSign}
-            variant="success"
-          />
-          <StatCard
-            title="Locações Ativas"
-            value={String(ativas.length)}
-            icon={FileText}
-            variant="primary"
-          />
-          <StatCard
-            title="Saídas Hoje"
-            value={String(saidasHoje.length)}
-            icon={TruckIcon}
-            variant="warning"
-          />
-          <StatCard
-            title="Retornos Hoje"
-            value={String(retornosHoje.length)}
-            icon={ArrowDownToLine}
-            variant="default"
-          />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => navigate("/novo-aluguel")}
+            className="rounded-[30px] border border-border bg-card p-6 text-left transition hover:scale-[1.02] hover:border-primary/30"
+          >
+            <FileText className="mb-5 h-10 w-10 text-primary" />
+            <h3 className="text-xl font-bold">Novo Aluguel</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Criar contrato e iniciar nova locação.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/clientes")}
+            className="rounded-[30px] border border-border bg-card p-6 text-left transition hover:scale-[1.02] hover:border-primary/30"
+          >
+            <TruckIcon className="mb-5 h-10 w-10 text-primary" />
+            <h3 className="text-xl font-bold">Clientes</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Gerencie seus clientes cadastrados.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/financeiro")}
+            className="rounded-[30px] border border-border bg-card p-6 text-left transition hover:scale-[1.02] hover:border-primary/30"
+          >
+            <DollarSign className="mb-5 h-10 w-10 text-primary" />
+            <h3 className="text-xl font-bold">Financeiro</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Controle entradas, saídas e faturamento.
+            </p>
+          </button>
         </div>
 
-        <div className="rounded-[30px] border border-border bg-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">
-            Disponibilidade de Estoque
-          </h2>
+        <div className="rounded-[35px] border border-border bg-card p-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black">Disponibilidade de Estoque</h2>
+            <p className="text-sm text-muted-foreground">
+              Equipamentos disponíveis para locação
+            </p>
+          </div>
 
           {loading ? (
             <p className="text-sm text-muted-foreground">Carregando...</p>
@@ -342,39 +417,34 @@ Estamos à disposição!`;
               Nenhum equipamento cadastrado.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {equipamentos.map((eq) => {
-                const quantidadeDisponivel = Number(
-                  eq.quantidade_disponivel || 0
-                );
+                const quantidadeDisponivel = Number(eq.quantidade_disponivel || 0);
                 const status = getEstoqueStatus(quantidadeDisponivel);
 
                 return (
                   <div
                     key={eq.id}
-                    className={`rounded-2xl border p-4 ${status.boxClass}`}
+                    className={`rounded-[25px] border p-5 ${status.boxClass}`}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           {eq.nome || "Sem nome"}
                         </p>
 
-                        <p
-                          className={`mt-2 text-2xl font-bold ${status.valueClass}`}
-                        >
+                        <h3 className={`mt-3 text-4xl font-black ${status.valueClass}`}>
                           {quantidadeDisponivel}
-                          <span className="ml-1 text-sm text-muted-foreground">
-                            un
-                          </span>
+                        </h3>
+
+                        <p className="text-sm text-muted-foreground">
+                          unidades disponíveis
                         </p>
                       </div>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${status.textClass}`}
-                      >
+                      <Badge className={`rounded-full ${status.textClass}`}>
                         {status.label}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                 );
@@ -383,10 +453,13 @@ Estamos à disposição!`;
           )}
         </div>
 
-        <div className="rounded-[30px] border border-border bg-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">
-            Avisos e Cobranças
-          </h2>
+        <div className="rounded-[35px] border border-border bg-card p-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black">Avisos e Cobranças</h2>
+            <p className="text-sm text-muted-foreground">
+              Locações próximas do vencimento
+            </p>
+          </div>
 
           {loading ? (
             <p className="text-sm text-muted-foreground">Carregando...</p>
@@ -395,31 +468,33 @@ Estamos à disposição!`;
               Nenhuma locação ativa cadastrada.
             </p>
           ) : (
-            <div className="space-y-3">
-              {locacoesAvisos.map((l) => {
-                const status = getCobrancaStatus(l.data_previsao_entrega);
-                const quantidadePecas = getQuantidadePecas(l);
+            <div className="space-y-4">
+              {locacoesAvisos.map((locacao) => {
+                const status = getCobrancaStatus(locacao.data_previsao_entrega);
+                const quantidadePecas = getQuantidadePecas(locacao);
 
                 return (
-                  <div key={l.id} className="rounded-2xl bg-secondary p-4">
-                    <div className="flex items-center justify-between gap-4">
+                  <div
+                    key={locacao.id}
+                    className="rounded-[25px] border border-border bg-secondary/50 p-5"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="font-medium text-foreground">
-                          #{l.numero_contrato ?? "-"} -{" "}
-                          {l.clientes?.nome_completo || "Sem cliente"}
-                        </p>
+                        <h3 className="text-lg font-bold">
+                          #{locacao.numero_contrato ?? "-"} —{" "}
+                          {locacao.clientes?.nome_completo || "Sem cliente"}
+                        </h3>
 
-                        <p className="text-sm text-muted-foreground">
-                          Locou: {formatDate(l.data_inicio || "")}
-                        </p>
-
-                        <p className="text-sm text-muted-foreground">
-                          Devolve: {formatDate(l.data_previsao_entrega || "")}
-                        </p>
-
-                        <p className="text-sm text-muted-foreground">
-                          Peças alugadas: {quantidadePecas}
-                        </p>
+                        <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+                          <p>Locou: {formatDate(locacao.data_inicio || "")}</p>
+                          <p>
+                            Devolve:{" "}
+                            {locacao.data_previsao_entrega
+                              ? formatDate(locacao.data_previsao_entrega)
+                              : "Sem previsão"}
+                          </p>
+                          <p>Peças: {quantidadePecas}</p>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-3">
@@ -438,7 +513,7 @@ Estamos à disposição!`;
                         <Button
                           size="sm"
                           className={`rounded-[30px] ${status.buttonClass}`}
-                          onClick={() => abrirWhatsApp(l)}
+                          onClick={() => abrirWhatsApp(locacao)}
                         >
                           {status.acao}
                         </Button>
