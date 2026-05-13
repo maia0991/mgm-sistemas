@@ -146,7 +146,7 @@ export default function LoginPage({
       }
 
       // =========================
-      // VERIFICA LOCAÇÃO
+      // VERIFICA PERFIL
       // =========================
       const { data: perfilData, error: perfilError } = await supabase
         .from("perfis")
@@ -170,6 +170,9 @@ export default function LoginPage({
         return;
       }
 
+      // =========================
+      // VERIFICA BLOQUEIO
+      // =========================
       const { data: locadora, error: locadoraError } = await supabase
         .from("locadoras")
         .select("ativo, data_vencimento")
@@ -195,10 +198,11 @@ export default function LoginPage({
       toast.success("Login realizado com sucesso!");
 
       setTimeout(() => {
-        navigate("/", {
+        navigate("/app", {
           replace: true,
         });
       }, 100);
+
     } catch (error) {
       console.error(error);
 
@@ -211,9 +215,7 @@ export default function LoginPage({
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md rounded-[30px] border border-border bg-card p-8 shadow-2xl">
-        {/* ========================= */}
-        {/* HEADER */}
-        {/* ========================= */}
+
         <div className="mb-8 text-center">
           <div
             onMouseDown={handleLogoDown}
@@ -257,9 +259,6 @@ export default function LoginPage({
           )}
         </div>
 
-        {/* ========================= */}
-        {/* FORM */}
-        {/* ========================= */}
         <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-2">
             <Label>Email</Label>
@@ -299,9 +298,6 @@ export default function LoginPage({
             )}
           </Button>
 
-          {/* ========================= */}
-          {/* WHATSAPP */}
-          {/* ========================= */}
           {!adminMode && (
             <button
               type="button"
@@ -321,16 +317,6 @@ export default function LoginPage({
             >
               Esqueceu a senha?
             </button>
-          )}
-
-          {/* ========================= */}
-          {/* DICA ADMIN */}
-          {/* ========================= */}
-          {!adminMode && (
-            <p className="pt-2 text-center text-[11px] text-muted-foreground/70">
-              {" "}
-              <span className="font-semibold"></span>
-            </p>
           )}
         </form>
       </div>

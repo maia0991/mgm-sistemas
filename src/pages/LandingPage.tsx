@@ -52,7 +52,7 @@ export default function LandingPage() {
               to="/login"
               className="rounded-[30px] bg-primary px-5 py-2 text-sm font-semibold text-white"
             >
-              Entrar no Sistema
+              Login de Usuário
             </Link>
           </div>
         </div>
