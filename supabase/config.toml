@@ -2,3 +2,5 @@ project_id = "nlkknqofbtlgpclyffxx"
 
 [functions.create-locadora-user]
 verify_jwt = false
+[functions.payment-webhook]
+verify_jwt = false

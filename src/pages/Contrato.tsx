@@ -31,7 +31,7 @@ interface LocacaoContrato {
   id: string;
   numero_contrato: number;
   data_inicio: string;
-  data_previsao_entrega: string;
+  data_previsao_entrega: string | null;
   taxa_entrega: number | string | null;
   valor_desconto: number | string | null;
   valor_total_pago: number | string | null;
@@ -56,6 +56,11 @@ interface PerfilEmpresa {
   endereco?: string | null;
 }
 
+interface FotoEntregaContrato {
+  id: string;
+  url_foto: string;
+}
+
 export default function ContratoPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -64,6 +69,7 @@ export default function ContratoPage() {
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null);
   const [equipamentos, setEquipamentos] = useState<EquipamentoContrato[]>([]);
   const [diasNaoCobrados, setDiasNaoCobrados] = useState<DiaNaoCobrado[]>([]);
+  const [fotosEntrega, setFotosEntrega] = useState<FotoEntregaContrato[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -76,19 +82,25 @@ export default function ContratoPage() {
     try {
       setLoading(true);
 
-      const [locacaoRes, perfilRes, equipamentosRes, diasRes] = await Promise.all([
-        supabase
-          .from("locacoes")
-          .select("*, clientes(*), itens_locacao(*)")
-          .eq("id", id)
-          .single(),
-        supabase.from("perfil_empresa").select("*").maybeSingle(),
-        supabase.from("equipamentos").select("id, nome"),
-        supabase
-          .from("dias_nao_cobrados")
-          .select("*")
-          .eq("ativo", true),
-      ]);
+      const [locacaoRes, perfilRes, equipamentosRes, diasRes, fotosRes] =
+        await Promise.all([
+          supabase
+            .from("locacoes")
+            .select("*, clientes(*), itens_locacao(*)")
+            .eq("id", id)
+            .single(),
+
+          supabase.from("perfil_empresa").select("*").maybeSingle(),
+
+          supabase.from("equipamentos").select("id, nome"),
+
+          supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
+
+          (supabase as any)
+            .from("fotos_entrega_locacao")
+            .select("id, url_foto")
+            .eq("locacao_id", id),
+        ]);
 
       if (locacaoRes.error || !locacaoRes.data) {
         console.error("Erro ao carregar contrato:", locacaoRes.error);
@@ -108,10 +120,43 @@ export default function ContratoPage() {
         console.error("Erro ao carregar dias não cobrados:", diasRes.error);
       }
 
+      if (fotosRes.error) {
+        console.error("Erro ao carregar Fotos do Equipamento no ato da entrega:", fotosRes.error);
+      }
+
+      const fotosBanco = ((fotosRes.data as FotoEntregaContrato[]) || []).filter(
+        Boolean
+      );
+
+      const fotosComUrl = await Promise.all(
+        fotosBanco.map(async (foto) => {
+          const { data: signed } = await supabase.storage
+            .from("fotos-entrega")
+            .createSignedUrl(foto.url_foto, 60 * 60);
+
+          if (signed?.signedUrl) {
+            return {
+              ...foto,
+              url_foto: signed.signedUrl,
+            };
+          }
+
+          const publicUrl = supabase.storage
+            .from("fotos-entrega")
+            .getPublicUrl(foto.url_foto).data.publicUrl;
+
+          return {
+            ...foto,
+            url_foto: publicUrl,
+          };
+        })
+      );
+
       setLocacao(locacaoRes.data as LocacaoContrato);
       setPerfilEmpresa((perfilRes.data as PerfilEmpresa | null) ?? null);
       setEquipamentos((equipamentosRes.data as EquipamentoContrato[]) || []);
       setDiasNaoCobrados((diasRes.data as DiaNaoCobrado[]) || []);
+      setFotosEntrega(fotosComUrl);
     } catch (error) {
       console.error("Erro inesperado ao carregar contrato:", error);
       toast.error("Erro inesperado ao carregar contrato");
@@ -119,6 +164,8 @@ export default function ContratoPage() {
       setLoading(false);
     }
   }
+
+  const dataFimCalculo = locacao?.data_previsao_entrega || locacao?.data_inicio;
 
   const itensComNome = useMemo(() => {
     if (!locacao) return [];
@@ -128,15 +175,16 @@ export default function ContratoPage() {
       const nome = equipamento?.nome || "Equipamento";
       const qtd = Number(item.quantidade_locada || 0);
       const diaria = Number(item.valor_diaria_fechado || 0);
-      const dataInicioCobranca =
-        item.data_inicio_cobranca || locacao.data_inicio;
+      const dataInicioCobranca = item.data_inicio_cobranca || locacao.data_inicio;
 
-      const diasItem = calcularDiasCobrados(
-        new Date(dataInicioCobranca + "T12:00:00"),
-        new Date(locacao.data_previsao_entrega + "T12:00:00"),
-        diasNaoCobrados,
-        locacao.cobrar_domingo
-      );
+      const diasItem = locacao.data_previsao_entrega
+        ? calcularDiasCobrados(
+            new Date(dataInicioCobranca + "T12:00:00"),
+            new Date(locacao.data_previsao_entrega + "T12:00:00"),
+            diasNaoCobrados,
+            locacao.cobrar_domingo
+          )
+        : 0;
 
       return {
         ...item,
@@ -151,15 +199,15 @@ export default function ContratoPage() {
   }, [locacao, equipamentos, diasNaoCobrados]);
 
   const diasEfetivos = useMemo(() => {
-    if (!locacao) return 0;
+    if (!locacao || !dataFimCalculo || !locacao.data_previsao_entrega) return 0;
 
     return calcularDiasCobrados(
       new Date(locacao.data_inicio + "T12:00:00"),
-      new Date(locacao.data_previsao_entrega + "T12:00:00"),
+      new Date(dataFimCalculo + "T12:00:00"),
       diasNaoCobrados,
       locacao.cobrar_domingo
     );
-  }, [locacao, diasNaoCobrados]);
+  }, [locacao, diasNaoCobrados, dataFimCalculo]);
 
   const subtotalItens = useMemo(() => {
     return itensComNome.reduce((soma, item) => soma + item.subtotal, 0);
@@ -234,7 +282,7 @@ export default function ContratoPage() {
             Contrato de Locação
           </h1>
 
-          <p className="mt-2 inline-block border border-black bg-gray-100 px-4 text-md font-black italic font-mono">
+          <p className="mt-2 inline-block border border-black bg-gray-100 px-4 font-mono text-md font-black italic">
             Nº {locacao.numero_contrato}
           </p>
         </div>
@@ -256,7 +304,8 @@ export default function ContratoPage() {
                 <strong>TELEFONE:</strong> {locacao.clientes?.whatsapp || "---"}
               </p>
               <p>
-                <strong>ENDEREÇO:</strong> {locacao.clientes?.endereco_obra || "—"}
+                <strong>ENDEREÇO:</strong>{" "}
+                {locacao.clientes?.endereco_obra || "—"}
               </p>
             </div>
           </div>
@@ -271,10 +320,16 @@ export default function ContratoPage() {
                 <strong>SAÍDA:</strong> {formatDate(locacao.data_inicio)}
               </p>
               <p>
-                <strong>DEVOLUÇÃO:</strong> {formatDate(locacao.data_previsao_entrega)}
+                <strong>DEVOLUÇÃO:</strong>{" "}
+                {locacao.data_previsao_entrega
+                  ? formatDate(locacao.data_previsao_entrega)
+                  : "Sem previsão"}
               </p>
               <p className="font-black uppercase italic text-blue-700">
-                <strong>Diárias: {diasEfetivos}</strong>
+                <strong>
+                  Diárias:{" "}
+                  {locacao.data_previsao_entrega ? diasEfetivos : "Sem previsão"}
+                </strong>
               </p>
             </div>
           </div>
@@ -304,7 +359,9 @@ export default function ContratoPage() {
                 <td className="py-3 text-center">{item.qtd}</td>
                 <td className="py-3 text-right">{formatCurrency(item.diaria)}</td>
                 <td className="py-3 text-right font-bold">
-                  {formatCurrency(item.subtotal)}
+                  {locacao.data_previsao_entrega
+                    ? formatCurrency(item.subtotal)
+                    : "A calcular"}
                 </td>
               </tr>
             ))}
@@ -320,10 +377,7 @@ export default function ContratoPage() {
 
             {taxaEntrega > 0 && (
               <tr>
-                <td
-                  colSpan={3}
-                  className="pt-1 text-right text-[10px] uppercase text-blue-700"
-                >
+                <td colSpan={3} className="pt-1 text-right text-[10px] uppercase text-blue-700">
                   Taxa de Entrega / Frete:
                 </td>
                 <td className="pt-1 text-right text-blue-700">
@@ -364,10 +418,7 @@ export default function ContratoPage() {
             )}
 
             <tr className="text-xl">
-              <td
-                colSpan={3}
-                className="pt-4 text-right font-black uppercase text-blue-700"
-              >
+              <td colSpan={3} className="pt-4 text-right font-black uppercase text-blue-700">
                 Saldo Final a Pagar:
               </td>
               <td className="border-b-4 border-blue-700 pt-4 text-right font-mono font-black text-blue-700">
@@ -383,13 +434,13 @@ export default function ContratoPage() {
           </p>
 
           <p>
-            1. O <strong>LOCATÁRIO</strong> se compromete a devolver os equipamentos
-            no prazo estipulado e em boas condições de uso.
+            1. O <strong>LOCATÁRIO</strong> se compromete a devolver os
+            equipamentos no prazo estipulado e em boas condições de uso.
           </p>
 
           <p>
-            2. Em caso de atraso na devolução, será cobrada diária adicional pelos
-            dias excedentes.
+            2. Em caso de atraso na devolução, será cobrada diária adicional
+            pelos dias excedentes.
           </p>
 
           <p>3. Domingos e feriados cadastrados não são cobrados.</p>
@@ -400,10 +451,43 @@ export default function ContratoPage() {
           </p>
 
           <p>
-            5. O <strong>LOCATÁRIO</strong> é responsável pela guarda e conservação
-            dos equipamentos durante o período de locação.
+            5. O <strong>LOCATÁRIO</strong> é responsável pela guarda e
+            conservação dos equipamentos durante o período de locação.
           </p>
         </div>
+
+        {fotosEntrega.length > 0 && (
+          <div className="mt-12 break-before-page">
+            <div className="mb-6 border-b border-black pb-2">
+              <h2 className="text-center text-xl font-black uppercase tracking-widest">
+                Fotos do Equipamento no ato da entrega
+              </h2>
+
+              <p className="mt-2 text-center text-[11px] uppercase text-gray-500">
+                Registro fotográfico dos equipamentos entregues
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              {fotosEntrega.map((foto, index) => (
+                <div
+                  key={foto.id}
+                  className="overflow-hidden rounded-xl border border-black"
+                >
+                  <img
+                    src={foto.url_foto}
+                    alt={`Foto ${index + 1}`}
+                    className="h-[260px] w-full object-cover"
+                  />
+
+                  <div className="border-t border-black bg-gray-100 px-3 py-2 text-center text-[10px] font-bold uppercase">
+                    Foto {index + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-20 grid grid-cols-2 gap-20">
           <div className="border-t border-black pt-2 text-center">

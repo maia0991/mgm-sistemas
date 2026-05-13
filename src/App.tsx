@@ -21,6 +21,7 @@ import PerfilEmpresa from "./pages/PerfilEmpresa.tsx";
 import Feriados from "./pages/Feriados.tsx";
 import Devolucao from "./pages/Devolucao.tsx";
 import Financeiro from "./pages/Financeiro.tsx";
+import MinhasFaturas from "./pages/MinhasFaturas.tsx";
 import Relatorios from "./pages/Relatorios.tsx";
 import Backup from "./pages/Backup.tsx";
 import Configuracoes from "./pages/Configuracoes.tsx";
@@ -42,7 +43,6 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-
             {/* SITE */}
             <Route path="/" element={<LandingPage />} />
 
@@ -120,10 +120,7 @@ const App = () => (
             <Route
               path="/alugueis"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <Locacoes />
                 </ProtectedRoute>
               }
@@ -141,10 +138,7 @@ const App = () => (
             <Route
               path="/alugueis/:id/contrato"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <Contrato />
                 </ProtectedRoute>
               }
@@ -153,10 +147,7 @@ const App = () => (
             <Route
               path="/alugueis/:id/comprovante"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <ComprovanteLocacao />
                 </ProtectedRoute>
               }
@@ -165,10 +156,7 @@ const App = () => (
             <Route
               path="/devolucao"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <Devolucao />
                 </ProtectedRoute>
               }
@@ -179,6 +167,15 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={["locadora"]}>
                   <Financeiro />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/minhas-faturas"
+              element={
+                <ProtectedRoute allowedRoles={["locadora"]}>
+                  <MinhasFaturas />
                 </ProtectedRoute>
               }
             />
@@ -231,10 +228,7 @@ const App = () => (
             <Route
               path="/locacoes/:id/contrato"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <Contrato />
                 </ProtectedRoute>
               }
@@ -243,35 +237,17 @@ const App = () => (
             <Route
               path="/locacoes/:id/comprovante"
               element={
-                <ProtectedRoute
-                  allowedRoles={["locadora"]}
-                  allowPartialBlock
-                >
+                <ProtectedRoute allowedRoles={["locadora"]} allowPartialBlock>
                   <ComprovanteLocacao />
                 </ProtectedRoute>
               }
             />
 
             {/* REDIRECTS */}
-            <Route
-              path="/equipamentos"
-              element={<Navigate to="/produtos" replace />}
-            />
-
-            <Route
-              path="/locacoes"
-              element={<Navigate to="/alugueis" replace />}
-            />
-
-            <Route
-              path="/locacoes/nova"
-              element={<Navigate to="/novo-aluguel" replace />}
-            />
-
-            <Route
-              path="/feriados"
-              element={<Navigate to="/dias-nao-cobrados" replace />}
-            />
+            <Route path="/equipamentos" element={<Navigate to="/produtos" replace />} />
+            <Route path="/locacoes" element={<Navigate to="/alugueis" replace />} />
+            <Route path="/locacoes/nova" element={<Navigate to="/novo-aluguel" replace />} />
+            <Route path="/feriados" element={<Navigate to="/dias-nao-cobrados" replace />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

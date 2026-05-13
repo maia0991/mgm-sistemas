@@ -22,11 +22,11 @@ export default function Layout({ children }: { children: ReactNode }) {
       )}
 
       <Topbar />
-      <AvisoFinanceiro />
+<AvisoFinanceiro />
 
-      <main className="min-h-screen px-6 py-6 pt-28">
-        {children}
-      </main>
+<main className="min-h-screen px-6 py-6 pt-28">
+  {children}
+</main>
     </div>
   );
 }

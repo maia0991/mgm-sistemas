@@ -54,7 +54,11 @@ const clienteMenus: MenuItem[] = [
   {
     label: "Utilitários",
     links: [
-      { to: "/dias-nao-cobrados", label: "Dias Não Cobrados", icon: CalendarOff },
+      {
+        to: "/dias-nao-cobrados",
+        label: "Dias Não Cobrados",
+        icon: CalendarOff,
+      },
       { to: "/backup", label: "Backup", icon: HardDrive },
     ],
   },
@@ -64,7 +68,9 @@ const clienteMenus: MenuItem[] = [
   },
   {
     label: "Configurações",
-    links: [{ to: "/configuracoes", label: "Configurações", icon: Settings }],
+    links: [
+      { to: "/configuracoes", label: "Configurações", icon: Settings },
+    ],
   },
 ];
 
@@ -90,14 +96,26 @@ const adminMenus: MenuItem[] = [
   {
     label: "Gestão",
     links: [
-      { to: "/admin-locadoras", label: "Bloqueios", icon: AlertTriangle },
+      {
+        to: "/admin-locadoras",
+        label: "Bloqueios",
+        icon: AlertTriangle,
+      },
     ],
   },
 ];
 
 export default function Topbar() {
   const location = useLocation();
-  const { signOut, role, bloqueioParcial, perfil } = useAuth();
+
+  const {
+    signOut,
+    role,
+    bloqueioParcial,
+    perfil,
+    statusFinanceiro,
+    diasParaVencimento,
+  } = useAuth();
 
   const [nomeEmpresa, setNomeEmpresa] = useState("MGM Sistemas");
   const [logoEmpresa, setLogoEmpresa] = useState<string | null>(null);
@@ -147,8 +165,13 @@ export default function Topbar() {
     : clienteMenus;
 
   const homeLink = isAdmin ? "/admin-dashboard" : "/app";
-  const subtitle = isAdmin ? "Painel Administrativo" : "Gestão de Locações";
+
+  const subtitle = isAdmin
+    ? "Painel Administrativo"
+    : "Gestão de Locações";
+
   const tituloSistema = isAdmin ? "MGM Sistemas" : nomeEmpresa;
+
   const temLogo = !!logoEmpresa && logoEmpresa.trim() !== "";
 
   return (
@@ -158,7 +181,9 @@ export default function Topbar() {
           <div className="bg-primary flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full font-bold text-white">
             {temLogo ? (
               <img
-                src={`${logoEmpresa}?v=${encodeURIComponent(logoEmpresa || "")}`}
+                src={`${logoEmpresa}?v=${encodeURIComponent(
+                  logoEmpresa || ""
+                )}`}
                 alt={tituloSistema}
                 className="h-full w-full object-cover"
               />
@@ -171,6 +196,7 @@ export default function Topbar() {
             <p className="max-w-[190px] truncate font-bold md:max-w-[260px]">
               {tituloSistema}
             </p>
+
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
         </Link>
@@ -183,12 +209,14 @@ export default function Topbar() {
                 className="flex items-center gap-1 text-sm font-semibold"
               >
                 {menu.label}
+
                 <ChevronDown className="h-4 w-4" />
               </button>
 
               <div className="invisible absolute top-full mt-3 w-64 rounded-xl border bg-card p-2 opacity-0 shadow-xl transition-all group-hover:visible group-hover:opacity-100">
                 {menu.links.map((link) => {
                   const active = location.pathname === link.to;
+
                   const Icon = link.icon;
 
                   return (
@@ -196,10 +224,13 @@ export default function Topbar() {
                       key={link.to}
                       to={link.to}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
-                        active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "hover:bg-muted"
                       }`}
                     >
                       {Icon ? <Icon className="h-4 w-4" /> : null}
+
                       {link.label}
                     </Link>
                   );
@@ -209,13 +240,45 @@ export default function Topbar() {
           ))}
         </nav>
 
+        {!isAdmin && (
+          <Link
+            to="/minhas-faturas"
+            className={`hidden items-center gap-2 rounded-[30px] px-4 py-2 text-sm font-bold transition lg:flex ${
+              statusFinanceiro === "expired" ||
+              statusFinanceiro === "blocked"
+                ? "border border-red-500/30 bg-red-500/15 text-red-500"
+                : statusFinanceiro === "warning" ||
+                  (typeof diasParaVencimento === "number" &&
+                    diasParaVencimento <= 3)
+                ? "border border-yellow-500/30 bg-yellow-500/15 text-yellow-500"
+                : "border border-green-500/30 bg-green-500/15 text-green-500"
+            }`}
+          >
+            {statusFinanceiro === "expired" ||
+            statusFinanceiro === "blocked"
+              ? "🔴"
+              : statusFinanceiro === "warning" ||
+                (typeof diasParaVencimento === "number" &&
+                  diasParaVencimento <= 3)
+              ? "🟡"
+              : "🟢"}
+
+            Minhas Faturas
+          </Link>
+        )}
+
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
             className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold lg:hidden"
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {mobileOpen ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <Menu className="h-4 w-4" />
+            )}
+
             Menu
           </button>
 
@@ -233,7 +296,10 @@ export default function Topbar() {
         <div className="max-h-[calc(100vh-80px)] overflow-auto border-t border-border bg-background px-4 py-4 lg:hidden">
           <div className="space-y-4">
             {menus.map((menu) => (
-              <div key={menu.label} className="rounded-2xl border border-border bg-card p-3">
+              <div
+                key={menu.label}
+                className="rounded-2xl border border-border bg-card p-3"
+              >
                 <p className="mb-2 text-sm font-bold text-foreground">
                   {menu.label}
                 </p>
@@ -241,6 +307,7 @@ export default function Topbar() {
                 <div className="space-y-1">
                   {menu.links.map((link) => {
                     const active = location.pathname === link.to;
+
                     const Icon = link.icon;
 
                     return (
@@ -248,10 +315,13 @@ export default function Topbar() {
                         key={link.to}
                         to={link.to}
                         className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${
-                          active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted"
                         }`}
                       >
                         {Icon ? <Icon className="h-4 w-4" /> : null}
+
                         {link.label}
                       </Link>
                     );
@@ -259,6 +329,33 @@ export default function Topbar() {
                 </div>
               </div>
             ))}
+
+            {!isAdmin && (
+              <Link
+                to="/minhas-faturas"
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                  statusFinanceiro === "expired" ||
+                  statusFinanceiro === "blocked"
+                    ? "border border-red-500/30 bg-red-500/15 text-red-500"
+                    : statusFinanceiro === "warning" ||
+                      (typeof diasParaVencimento === "number" &&
+                        diasParaVencimento <= 3)
+                    ? "border border-yellow-500/30 bg-yellow-500/15 text-yellow-500"
+                    : "border border-green-500/30 bg-green-500/15 text-green-500"
+                }`}
+              >
+                {statusFinanceiro === "expired" ||
+                statusFinanceiro === "blocked"
+                  ? "🔴"
+                  : statusFinanceiro === "warning" ||
+                    (typeof diasParaVencimento === "number" &&
+                      diasParaVencimento <= 3)
+                  ? "🟡"
+                  : "🟢"}
+
+                Minhas Faturas
+              </Link>
+            )}
 
             <button
               onClick={signOut}
