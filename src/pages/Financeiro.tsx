@@ -56,6 +56,8 @@ interface ContaReceber {
   created_at: string;
 }
 
+type FiltroStatus = "aberto" | "vencidas" | "pagas" | "todas";
+
 export default function FinanceiroPage() {
   const [locacoes, setLocacoes] = useState<LocacaoComCliente[]>([]);
   const [sangrias, setSangrias] = useState<Sangria[]>([]);
@@ -64,6 +66,11 @@ export default function FinanceiroPage() {
 
   const [loading, setLoading] = useState(true);
   const [filtroMes, setFiltroMes] = useState(format(new Date(), "yyyy-MM"));
+
+  const [filtroContasReceber, setFiltroContasReceber] =
+    useState<FiltroStatus>("aberto");
+  const [filtroContasPagar, setFiltroContasPagar] =
+    useState<FiltroStatus>("aberto");
 
   const [openSangria, setOpenSangria] = useState(false);
   const [savingSangria, setSavingSangria] = useState(false);
@@ -77,7 +84,9 @@ export default function FinanceiroPage() {
   const [baixandoConta, setBaixandoConta] = useState<ContaPagar | null>(null);
   const [savingBaixa, setSavingBaixa] = useState(false);
 
-  const [recebendoConta, setRecebendoConta] = useState<ContaReceber | null>(null);
+  const [recebendoConta, setRecebendoConta] = useState<ContaReceber | null>(
+    null
+  );
   const [savingRecebimento, setSavingRecebimento] = useState(false);
 
   const [formSangria, setFormSangria] = useState({
@@ -477,6 +486,8 @@ export default function FinanceiroPage() {
     }
   }
 
+  const hoje = format(new Date(), "yyyy-MM-dd");
+
   const finalizadas = useMemo(
     () => locacoes.filter((l) => l.situacao === "finalizado"),
     [locacoes]
@@ -512,10 +523,9 @@ export default function FinanceiroPage() {
   const contasPendentes = contasPagar.filter((c) => c.status === "pendente");
   const contasPagas = contasPagar.filter((c) => c.status === "pago");
 
-  const contasVencidas = contasPendentes.filter((c) => {
-    const hoje = format(new Date(), "yyyy-MM-dd");
-    return c.data_vencimento < hoje;
-  });
+  const contasVencidas = contasPendentes.filter(
+    (c) => c.data_vencimento < hoje
+  );
 
   const contasReceberPendentes = contasReceber.filter(
     (c) => c.status === "pendente"
@@ -525,10 +535,29 @@ export default function FinanceiroPage() {
     (c) => c.status === "recebido"
   );
 
-  const contasReceberVencidas = contasReceberPendentes.filter((c) => {
-    const hoje = format(new Date(), "yyyy-MM-dd");
-    return c.data_vencimento < hoje;
-  });
+  const contasReceberVencidas = contasReceberPendentes.filter(
+    (c) => c.data_vencimento < hoje
+  );
+
+  const contasPagarFiltradas = useMemo(() => {
+    if (filtroContasPagar === "todas") return contasPagar;
+    if (filtroContasPagar === "pagas") return contasPagas;
+    if (filtroContasPagar === "vencidas") return contasVencidas;
+    return contasPendentes;
+  }, [contasPagar, contasPagas, contasVencidas, contasPendentes, filtroContasPagar]);
+
+  const contasReceberFiltradas = useMemo(() => {
+    if (filtroContasReceber === "todas") return contasReceber;
+    if (filtroContasReceber === "pagas") return contasRecebidas;
+    if (filtroContasReceber === "vencidas") return contasReceberVencidas;
+    return contasReceberPendentes;
+  }, [
+    contasReceber,
+    contasRecebidas,
+    contasReceberVencidas,
+    contasReceberPendentes,
+    filtroContasReceber,
+  ]);
 
   const totalContasReceberPendentes = contasReceberPendentes.reduce(
     (acc, c) => acc + Number(c.valor || 0),
@@ -550,13 +579,29 @@ export default function FinanceiroPage() {
     totalSangrias -
     totalContasPagasCaixa;
 
-  const locacoesMes = locacoes.filter((l) =>
-    l.created_at?.startsWith(filtroMes)
-  );
+  const locacoesMes = locacoes.filter((l) => l.created_at?.startsWith(filtroMes));
 
   const faturamentoMes = locacoesMes
     .filter((l) => l.situacao === "finalizado")
     .reduce((acc, l) => acc + Number(l.valor_total_final || 0), 0);
+
+  function filtroButtonClass(ativo: boolean) {
+    return ativo ? "default" : "outline";
+  }
+
+  function mensagemFiltroVazio(tipo: "pagar" | "receber") {
+    const filtro = tipo === "pagar" ? filtroContasPagar : filtroContasReceber;
+
+    if (filtro === "aberto") return "Nenhuma conta em aberto.";
+    if (filtro === "vencidas") return "Nenhuma conta vencida.";
+    if (filtro === "pagas") {
+      return tipo === "pagar"
+        ? "Nenhuma conta paga encontrada."
+        : "Nenhuma conta recebida encontrada.";
+    }
+
+    return "Nenhuma conta cadastrada.";
+  }
 
   return (
     <Layout>
@@ -632,14 +677,18 @@ export default function FinanceiroPage() {
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
           <div className="rounded-[30px] border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground">Contas a Pagar Pendentes</p>
+            <p className="text-sm text-muted-foreground">
+              Contas a Pagar Pendentes
+            </p>
             <p className="text-2xl font-bold text-foreground">
               {contasPendentes.length}
             </p>
           </div>
 
           <div className="rounded-[30px] border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground">Contas a Pagar Vencidas</p>
+            <p className="text-sm text-muted-foreground">
+              Contas a Pagar Vencidas
+            </p>
             <p className="text-2xl font-bold text-destructive">
               {contasVencidas.length}
             </p>
@@ -781,12 +830,57 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="rounded-[30px] border border-border bg-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">
-            Contas a Receber
-          </h2>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Contas a Receber
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Por padrão aparecem apenas as contas em aberto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasReceber === "aberto")}
+                onClick={() => setFiltroContasReceber("aberto")}
+              >
+                Em aberto
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasReceber === "vencidas")}
+                onClick={() => setFiltroContasReceber("vencidas")}
+              >
+                Vencidas
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasReceber === "pagas")}
+                onClick={() => setFiltroContasReceber("pagas")}
+              >
+                Recebidas
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasReceber === "todas")}
+                onClick={() => setFiltroContasReceber("todas")}
+              >
+                Todas
+              </Button>
+            </div>
+          </div>
 
           <div className="max-h-[500px] space-y-2 overflow-auto">
-            {contasReceber.map((conta) => (
+            {contasReceberFiltradas.map((conta) => (
               <div
                 key={conta.id}
                 className="flex flex-col gap-4 rounded-2xl bg-secondary p-4 md:flex-row md:items-center md:justify-between"
@@ -822,7 +916,7 @@ export default function FinanceiroPage() {
                   )}
 
                   {conta.status === "pendente" &&
-                    conta.data_vencimento < format(new Date(), "yyyy-MM-dd") && (
+                    conta.data_vencimento < hoje && (
                       <p className="text-xs font-semibold text-destructive">
                         Conta vencida
                       </p>
@@ -863,21 +957,66 @@ export default function FinanceiroPage() {
               </div>
             ))}
 
-            {contasReceber.length === 0 && (
+            {contasReceberFiltradas.length === 0 && (
               <p className="py-4 text-center text-muted-foreground">
-                Nenhuma conta a receber cadastrada.
+                {mensagemFiltroVazio("receber")}
               </p>
             )}
           </div>
         </div>
 
         <div className="rounded-[30px] border border-border bg-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">
-            Contas a Pagar
-          </h2>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Contas a Pagar
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Por padrão aparecem apenas as contas em aberto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasPagar === "aberto")}
+                onClick={() => setFiltroContasPagar("aberto")}
+              >
+                Em aberto
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasPagar === "vencidas")}
+                onClick={() => setFiltroContasPagar("vencidas")}
+              >
+                Vencidas
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasPagar === "pagas")}
+                onClick={() => setFiltroContasPagar("pagas")}
+              >
+                Pagas
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={filtroButtonClass(filtroContasPagar === "todas")}
+                onClick={() => setFiltroContasPagar("todas")}
+              >
+                Todas
+              </Button>
+            </div>
+          </div>
 
           <div className="max-h-[500px] space-y-2 overflow-auto">
-            {contasPagar.map((conta) => (
+            {contasPagarFiltradas.map((conta) => (
               <div
                 key={conta.id}
                 className="flex flex-col gap-4 rounded-2xl bg-secondary p-4 md:flex-row md:items-center md:justify-between"
@@ -917,7 +1056,7 @@ export default function FinanceiroPage() {
                   )}
 
                   {conta.status === "pendente" &&
-                    conta.data_vencimento < format(new Date(), "yyyy-MM-dd") && (
+                    conta.data_vencimento < hoje && (
                       <p className="text-xs font-semibold text-destructive">
                         Conta vencida
                       </p>
@@ -952,9 +1091,9 @@ export default function FinanceiroPage() {
               </div>
             ))}
 
-            {contasPagar.length === 0 && (
+            {contasPagarFiltradas.length === 0 && (
               <p className="py-4 text-center text-muted-foreground">
-                Nenhuma conta cadastrada.
+                {mensagemFiltroVazio("pagar")}
               </p>
             )}
           </div>
