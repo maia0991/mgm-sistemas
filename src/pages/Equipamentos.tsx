@@ -10,12 +10,15 @@ import { Plus, Pencil, Ban, CheckCircle, X } from "lucide-react";
 import ActionGuard from "@/components/ActionGuard";
 import { useBillingAccess } from "@/hooks/useBillingAccess";
 import { useAuth } from "@/contexts/AuthContext";
+import { maskMoney, unmaskMoney } from "@/lib/masks";
 
 interface EquipamentoRow {
   id: string;
   nome: string;
   descricao: string | null;
   valor_diaria: number | string;
+  valor_semanal?: number | string | null;
+  valor_mensal?: number | string | null;
   quantidade_disponivel: number;
   ativo: boolean;
   created_at?: string;
@@ -25,6 +28,8 @@ const initialForm = {
   nome: "",
   descricao: "",
   valor_diaria: "",
+  valor_semanal: "",
+  valor_mensal: "",
   quantidade_disponivel: "1",
 };
 
@@ -77,12 +82,16 @@ export default function EquipamentosPage() {
 
   function handleEdit(eq: EquipamentoRow) {
     setEditing(eq);
+
     setForm({
       nome: eq.nome || "",
       descricao: eq.descricao || "",
       valor_diaria: String(eq.valor_diaria ?? ""),
+      valor_semanal: String(eq.valor_semanal ?? ""),
+      valor_mensal: String(eq.valor_mensal ?? ""),
       quantidade_disponivel: String(eq.quantidade_disponivel ?? 1),
     });
+
     setOpenModal(true);
   }
 
@@ -108,11 +117,24 @@ export default function EquipamentosPage() {
       return;
     }
 
-    const valorDiaria = Number(form.valor_diaria);
+    const valorDiaria = Number(form.valor_diaria || 0);
+    const valorSemanal = Number(form.valor_semanal || 0);
+    const valorMensal = Number(form.valor_mensal || 0);
+
     const quantidadeDisponivel = Number(form.quantidade_disponivel);
 
     if (Number.isNaN(valorDiaria) || valorDiaria < 0) {
       toast.error("Informe um valor de diária válido");
+      return;
+    }
+
+    if (Number.isNaN(valorSemanal) || valorSemanal < 0) {
+      toast.error("Informe um valor semanal válido");
+      return;
+    }
+
+    if (Number.isNaN(valorMensal) || valorMensal < 0) {
+      toast.error("Informe um valor mensal válido");
       return;
     }
 
@@ -129,12 +151,14 @@ export default function EquipamentosPage() {
       setSaving(true);
 
       if (editing) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("equipamentos")
           .update({
             nome: form.nome.trim(),
             descricao: form.descricao.trim() || null,
             valor_diaria: valorDiaria,
+            valor_semanal: valorSemanal,
+            valor_mensal: valorMensal,
             quantidade_disponivel: quantidadeDisponivel,
           })
           .eq("id", editing.id);
@@ -147,14 +171,18 @@ export default function EquipamentosPage() {
 
         toast.success("Equipamento atualizado com sucesso!");
       } else {
-        const { error } = await supabase.from("equipamentos").insert({
-          nome: form.nome.trim(),
-          descricao: form.descricao.trim() || null,
-          valor_diaria: valorDiaria,
-          quantidade_disponivel: quantidadeDisponivel,
-          ativo: true,
-          locadora_id: locadoraId,
-        });
+        const { error } = await (supabase as any)
+          .from("equipamentos")
+          .insert({
+            nome: form.nome.trim(),
+            descricao: form.descricao.trim() || null,
+            valor_diaria: valorDiaria,
+            valor_semanal: valorSemanal,
+            valor_mensal: valorMensal,
+            quantidade_disponivel: quantidadeDisponivel,
+            ativo: true,
+            locadora_id: locadoraId,
+          });
 
         if (error) {
           console.error("Erro ao criar equipamento:", error);
@@ -222,7 +250,10 @@ export default function EquipamentosPage() {
       <div className="animate-fade-in space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Equipamentos</h1>
+            <h1 className="text-3xl font-bold text-foreground">
+              Equipamentos
+            </h1>
+
             <p className="text-muted-foreground">
               Gerencie os equipamentos da sua locadora
             </p>
@@ -258,7 +289,9 @@ export default function EquipamentosPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                      <p className="font-semibold text-foreground">{eq.nome}</p>
+                      <p className="font-semibold text-foreground">
+                        {eq.nome}
+                      </p>
 
                       <Badge
                         className={
@@ -276,7 +309,9 @@ export default function EquipamentosPage() {
                     </p>
 
                     <p className="text-sm text-muted-foreground">
-                      Diária: R$ {Number(eq.valor_diaria).toFixed(2)} • Estoque:{" "}
+                      Diária:{" "}
+                      {maskMoney(eq.valor_diaria || 0)} • Mensal:{" "}
+                      {maskMoney(eq.valor_mensal || 0)} • Estoque:{" "}
                       {eq.quantidade_disponivel}
                     </p>
                   </div>
@@ -328,41 +363,88 @@ export default function EquipamentosPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Nome</Label>
+
                   <Input
                     value={form.nome}
                     onChange={(e) =>
-                      setForm((prev) => ({ ...prev, nome: e.target.value }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-                  <Input
-                    value={form.descricao}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, descricao: e.target.value }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Valor da Diária</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={form.valor_diaria}
-                    onChange={(e) =>
                       setForm((prev) => ({
                         ...prev,
-                        valor_diaria: e.target.value,
+                        nome: e.target.value,
                       }))
                     }
                   />
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Descrição</Label>
+
+                  <Input
+                    value={form.descricao}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        descricao: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Valor da Diária</Label>
+
+                    <Input
+                      type="text"
+                      value={maskMoney(form.valor_diaria)}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_diaria: String(
+                            unmaskMoney(e.target.value)
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Valor Semanal</Label>
+
+                    <Input
+                      type="text"
+                      value={maskMoney(form.valor_semanal)}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_semanal: String(
+                            unmaskMoney(e.target.value)
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Valor Mensal</Label>
+
+                    <Input
+                      type="text"
+                      value={maskMoney(form.valor_mensal)}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_mensal: String(
+                            unmaskMoney(e.target.value)
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Quantidade Disponível</Label>
+
                   <Input
                     type="number"
                     step="1"
@@ -377,12 +459,20 @@ export default function EquipamentosPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={closeModal}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeModal}
+                  >
                     Cancelar
                   </Button>
 
                   <ActionGuard fallbackLabel="Salvar bloqueado">
-                    <Button type="button" onClick={handleSave} disabled={saving}>
+                    <Button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saving}
+                    >
                       {saving ? "Salvando..." : "Salvar"}
                     </Button>
                   </ActionGuard>

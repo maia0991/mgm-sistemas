@@ -7,6 +7,7 @@ import {
   situacaoLabel,
   situacaoColor,
   calcularDiasCobrados,
+  calcularPeriodosCobrados,
 } from "@/lib/calculos";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,19 @@ import {
   Trash2,
   RefreshCcw,
   Receipt,
+  CheckCircle,
 } from "lucide-react";
 import ActionGuard from "@/components/ActionGuard";
 import { useBillingAccess } from "@/hooks/useBillingAccess";
-import { DiaNaoCobrado } from "@/types";
+import { DiaNaoCobrado, TipoCobranca } from "@/types";
 
 type ClienteLocacao = {
   nome_completo?: string | null;
+};
+
+type EquipamentoResumo = {
+  id?: string;
+  valor_diaria?: number | string | null;
 };
 
 type ItemLocacao = {
@@ -34,7 +41,9 @@ type ItemLocacao = {
   equipamento_id: string;
   quantidade_locada: number | string;
   valor_diaria_fechado?: number | string | null;
+  tipo_cobranca?: TipoCobranca | string | null;
   data_inicio_cobranca?: string | null;
+  equipamentos?: EquipamentoResumo | null;
 };
 
 type LocacaoListItem = {
@@ -52,8 +61,39 @@ type LocacaoListItem = {
   itens_locacao?: ItemLocacao[] | null;
 };
 
+function normalizarTipo(tipo?: string | null): TipoCobranca {
+  if (tipo === "mensal") return "mensal";
+  if (tipo === "semanal") return "semanal";
+  return "diaria";
+}
+
+function calcularSubtotalItem(item: ItemLocacao, dias: number) {
+  const tipo = normalizarTipo(item.tipo_cobranca);
+
+  const quantidade = Number(item.quantidade_locada || 0);
+
+  const valorPeriodo = Number(item.valor_diaria_fechado || 0);
+
+  const valorDiariaExtra =
+    tipo === "diaria"
+      ? valorPeriodo
+      : Number(item.equipamentos?.valor_diaria || 0);
+
+  if (tipo === "diaria") {
+    return quantidade * valorPeriodo * dias;
+  }
+
+  const calculo = calcularPeriodosCobrados(dias, tipo);
+
+  return (
+    quantidade * valorPeriodo * Number(calculo.periodos || 0) +
+    quantidade * valorDiariaExtra * Number(calculo.diasExtras || 0)
+  );
+}
+
 export default function LocacoesPage() {
   const navigate = useNavigate();
+
   const { blockedByBilling } = useBillingAccess();
 
   const [locacoes, setLocacoes] = useState<LocacaoListItem[]>([]);
@@ -73,19 +113,31 @@ export default function LocacoesPage() {
 
       const { data, error } = await supabase
         .from("locacoes")
-        .select("*, clientes(*), itens_locacao(*)")
+        .select(
+          `
+          *,
+          clientes(*),
+          itens_locacao(
+            *,
+            equipamentos(
+              id,
+              valor_diaria
+            )
+          )
+        `
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Erro ao carregar locações:", error);
+        console.error(error);
         toast.error("Erro ao carregar locações");
         return;
       }
 
-      setLocacoes(((data as LocacaoListItem[]) || []).filter(Boolean));
+      setLocacoes((data as unknown as LocacaoListItem[]) || []);
     } catch (error) {
-      console.error("Erro inesperado ao carregar locações:", error);
-      toast.error("Erro inesperado ao carregar locações");
+      console.error(error);
+      toast.error("Erro ao carregar locações");
     } finally {
       setLoading(false);
     }
@@ -93,7 +145,7 @@ export default function LocacoesPage() {
 
   function handleEdit(id: string) {
     if (blockedByBilling) {
-      toast.error("Plano vencido. Não é possível editar locações.");
+      toast.error("Plano vencido");
       return;
     }
 
@@ -108,78 +160,56 @@ export default function LocacoesPage() {
     navigate(`/alugueis/${id}/comprovante`);
   }
 
+  function handleDarBaixa() {
+    navigate("/devolucao");
+  }
+
   async function handleRenew(locacao: LocacaoListItem) {
     if (blockedByBilling) {
-      toast.error("Plano vencido. Não é possível renovar locações.");
-      return;
-    }
-
-    if (locacao.situacao !== "ativo") {
-      toast.error("Só é possível renovar locações ativas.");
+      toast.error("Plano vencido");
       return;
     }
 
     const novaData = window.prompt(
-      `Informe a nova data de devolução para a locação #${locacao.numero_contrato} (AAAA-MM-DD):`,
+      "Nova data de devolução:",
       locacao.data_previsao_entrega || ""
     );
 
     if (!novaData) return;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(novaData)) {
-      toast.error("Data inválida. Use o formato AAAA-MM-DD.");
-      return;
-    }
-
-    if (!locacao.data_previsao_entrega || !locacao.data_inicio) {
-      toast.error("Locação sem datas válidas para renovação.");
-      return;
-    }
-
-    if (novaData <= locacao.data_previsao_entrega) {
-      toast.error("A nova data precisa ser maior que a data atual de devolução.");
-      return;
-    }
-
     try {
       setRenewingId(locacao.id);
 
-      const { data: diasData, error: diasError } = await supabase
+      const { data: diasData } = await supabase
         .from("dias_nao_cobrados")
         .select("*")
         .eq("ativo", true);
 
-      if (diasError) {
-        console.error("Erro ao buscar dias não cobrados:", diasError);
-        toast.error("Erro ao calcular renovação");
-        return;
-      }
+      const diasNaoCobrados = (diasData as unknown as DiaNaoCobrado[]) || [];
 
-      const diasNaoCobrados = (diasData as DiaNaoCobrado[]) || [];
+      const subtotalItens = (locacao.itens_locacao || []).reduce(
+        (acc, item) => {
+          const inicio =
+            item.data_inicio_cobranca || locacao.data_inicio || "";
 
-      const subtotalItens = (locacao.itens_locacao || []).reduce((acc, item) => {
-        const inicioItem = item.data_inicio_cobranca || locacao.data_inicio || "";
-        const dias = calcularDiasCobrados(
-          new Date(inicioItem + "T12:00:00"),
-          new Date(novaData + "T12:00:00"),
-          diasNaoCobrados,
-          !!locacao.cobrar_domingo
-        );
+          const dias = calcularDiasCobrados(
+            new Date(inicio + "T12:00:00"),
+            new Date(novaData + "T12:00:00"),
+            diasNaoCobrados,
+            !!locacao.cobrar_domingo
+          );
 
-        return (
-          acc +
-          Number(item.quantidade_locada || 0) *
-            Number(item.valor_diaria_fechado || 0) *
-            dias
-        );
-      }, 0);
+          return acc + calcularSubtotalItem(item, dias);
+        },
+        0
+      );
 
       const novoTotal =
         subtotalItens +
         Number(locacao.taxa_entrega || 0) -
         Number(locacao.valor_desconto || 0);
 
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from("locacoes")
         .update({
           data_previsao_entrega: novaData,
@@ -187,17 +217,17 @@ export default function LocacoesPage() {
         })
         .eq("id", locacao.id);
 
-      if (updateError) {
-        console.error("Erro ao renovar locação:", updateError);
-        toast.error("Erro ao renovar locação");
+      if (error) {
+        console.error(error);
+        toast.error("Erro ao renovar");
         return;
       }
 
-      toast.success("Locação renovada com sucesso!");
+      toast.success("Locação renovada!");
       await fetchLocacoes();
     } catch (error) {
-      console.error("Erro inesperado ao renovar locação:", error);
-      toast.error("Erro inesperado ao renovar locação");
+      console.error(error);
+      toast.error("Erro ao renovar");
     } finally {
       setRenewingId(null);
     }
@@ -205,12 +235,12 @@ export default function LocacoesPage() {
 
   async function handleDelete(locacao: LocacaoListItem) {
     if (blockedByBilling) {
-      toast.error("Plano vencido. Não é possível excluir locações.");
+      toast.error("Plano vencido");
       return;
     }
 
     const confirmou = window.confirm(
-      `Deseja realmente excluir a locação #${locacao.numero_contrato ?? ""}?`
+      `Deseja excluir a locação #${locacao.numero_contrato}?`
     );
 
     if (!confirmou) return;
@@ -219,60 +249,45 @@ export default function LocacoesPage() {
       setDeletingId(locacao.id);
 
       for (const item of locacao.itens_locacao || []) {
-        const { data: eq, error: eqError } = await supabase
+        const { data: eq } = await supabase
           .from("equipamentos")
           .select("quantidade_disponivel")
           .eq("id", item.equipamento_id)
           .maybeSingle();
 
-        if (eqError) {
-          console.error("Erro ao consultar estoque:", eqError);
-          continue;
-        }
-
         if (eq) {
-          const { error: estoqueError } = await supabase
+          await supabase
             .from("equipamentos")
             .update({
               quantidade_disponivel:
-                Number(eq.quantidade_disponivel) +
+                Number(eq.quantidade_disponivel || 0) +
                 Number(item.quantidade_locada || 0),
             })
             .eq("id", item.equipamento_id);
-
-          if (estoqueError) {
-            console.error("Erro ao restaurar estoque:", estoqueError);
-          }
         }
       }
 
-      const { error: deleteItensError } = await supabase
+      await supabase
         .from("itens_locacao")
         .delete()
         .eq("locacao_id", locacao.id);
 
-      if (deleteItensError) {
-        console.error("Erro ao excluir itens da locação:", deleteItensError);
-        toast.error("Erro ao excluir itens da locação");
-        return;
-      }
-
-      const { error: deleteLocacaoError } = await supabase
+      const { error } = await supabase
         .from("locacoes")
         .delete()
         .eq("id", locacao.id);
 
-      if (deleteLocacaoError) {
-        console.error("Erro ao excluir locação:", deleteLocacaoError);
-        toast.error("Erro ao excluir locação");
+      if (error) {
+        console.error(error);
+        toast.error("Erro ao excluir");
         return;
       }
 
-      toast.success("Locação excluída com sucesso!");
+      toast.success("Locação excluída!");
       await fetchLocacoes();
     } catch (error) {
-      console.error("Erro inesperado ao excluir locação:", error);
-      toast.error("Erro inesperado ao excluir locação");
+      console.error(error);
+      toast.error("Erro ao excluir");
     } finally {
       setDeletingId(null);
     }
@@ -283,11 +298,15 @@ export default function LocacoesPage() {
 
     return locacoes.filter((l) => {
       const matchBusca =
-        String(l.numero_contrato ?? "").toLowerCase().includes(term) ||
-        (l.clientes?.nome_completo || "").toLowerCase().includes(term) ||
-        String(l.situacao ?? "").toLowerCase().includes(term);
+        String(l.numero_contrato || "")
+          .toLowerCase()
+          .includes(term) ||
+        (l.clientes?.nome_completo || "")
+          .toLowerCase()
+          .includes(term);
 
-      const matchFiltro = filtro === "todos" ? true : l.situacao === "ativo";
+      const matchFiltro =
+        filtro === "todos" ? true : l.situacao === "ativo";
 
       return matchBusca && matchFiltro;
     });
@@ -297,17 +316,21 @@ export default function LocacoesPage() {
     <Layout>
       <div className="animate-fade-in space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Aluguéis</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Aluguéis
+          </h1>
+
           <p className="text-muted-foreground">
-            Gerencie as locações da sua locadora
+            Gerencie as locações
           </p>
         </div>
 
         <div className="relative">
           <Search className="absolute left-4 top-3 h-4 w-4 text-muted-foreground" />
+
           <Input
             className="rounded-[30px] pl-10"
-            placeholder="Buscar por contrato, cliente ou situação..."
+            placeholder="Buscar..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -315,7 +338,6 @@ export default function LocacoesPage() {
 
         <div className="flex gap-2">
           <Button
-            type="button"
             variant={filtro === "ativo" ? "default" : "outline"}
             className="rounded-[30px]"
             onClick={() => setFiltro("ativo")}
@@ -324,7 +346,6 @@ export default function LocacoesPage() {
           </Button>
 
           <Button
-            type="button"
             variant={filtro === "todos" ? "default" : "outline"}
             className="rounded-[30px]"
             onClick={() => setFiltro("todos")}
@@ -335,31 +356,34 @@ export default function LocacoesPage() {
 
         <div className="space-y-3">
           {loading ? (
-            <p className="py-8 text-center text-muted-foreground">Carregando...</p>
+            <p className="py-10 text-center text-muted-foreground">
+              Carregando...
+            </p>
           ) : filtered.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">
-              Nenhuma locação encontrada.
+            <p className="py-10 text-center text-muted-foreground">
+              Nenhuma locação encontrada
             </p>
           ) : (
             filtered.map((l) => (
               <div
                 key={l.id}
-                className="rounded-[30px] border border-border bg-card p-5 transition-all hover:border-primary/30"
+                className="rounded-[30px] border border-border bg-card p-5"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <p className="font-semibold text-foreground">
-                        #{l.numero_contrato ?? "-"}
+                        #{l.numero_contrato}
                       </p>
 
-                      <Badge className={situacaoColor(l.situacao ?? "")}>
-                        {situacaoLabel(l.situacao ?? "")}
+                      <Badge className={situacaoColor(l.situacao || "")}>
+                        {situacaoLabel(l.situacao || "")}
                       </Badge>
                     </div>
 
                     <p className="text-sm text-muted-foreground">
-                      Cliente: {l.clientes?.nome_completo || "Sem cliente"}
+                      Cliente:{" "}
+                      {l.clientes?.nome_completo || "Sem cliente"}
                     </p>
 
                     <p className="text-sm text-muted-foreground">
@@ -368,68 +392,88 @@ export default function LocacoesPage() {
                     </p>
 
                     <p className="text-sm text-muted-foreground">
-                      Total: {formatCurrency(Number(l.valor_total_final || 0))}
+                      Total:{" "}
+                      {formatCurrency(
+                        Number(l.valor_total_final || 0)
+                      )}
                     </p>
 
                     {Number(l.valor_total_pago || 0) > 0 && (
                       <p className="text-sm text-success">
-                        Entrada: {formatCurrency(Number(l.valor_total_pago || 0))}
-                      </p>
-                    )}
-
-                    {!!l.itens_locacao?.length && (
-                      <p className="text-xs text-muted-foreground">
-                        Itens: {l.itens_locacao.length}
+                        Entrada:{" "}
+                        {formatCurrency(
+                          Number(l.valor_total_pago || 0)
+                        )}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex gap-2">
-                    <ActionGuard fallbackLabel="Edição bloqueada">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <ActionGuard fallbackLabel="Bloqueado">
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
+                        className="justify-start gap-2 rounded-[30px]"
                         onClick={() => handleEdit(l.id)}
                       >
                         <Pencil className="h-4 w-4" />
+                        Editar
                       </Button>
                     </ActionGuard>
 
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
+                      className="justify-start gap-2 rounded-[30px]"
                       onClick={() => handlePrintContract(l.id)}
                     >
                       <FileText className="h-4 w-4" />
+                      Contrato
                     </Button>
 
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
+                      className="justify-start gap-2 rounded-[30px]"
                       onClick={() => handlePrintComprovante(l.id)}
                     >
                       <Receipt className="h-4 w-4" />
+                      Notinha
                     </Button>
 
-                    <ActionGuard fallbackLabel="Renovação bloqueada">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="justify-start gap-2 rounded-[30px]"
+                      onClick={handleDarBaixa}
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Dar baixa
+                    </Button>
+
+                    <ActionGuard fallbackLabel="Bloqueado">
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
+                        className="justify-start gap-2 rounded-[30px]"
                         onClick={() => handleRenew(l)}
                         disabled={renewingId === l.id}
                       >
                         <RefreshCcw className="h-4 w-4" />
+                        Renovar
                       </Button>
                     </ActionGuard>
 
-                    <ActionGuard fallbackLabel="Exclusão bloqueada">
+                    <ActionGuard fallbackLabel="Bloqueado">
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
+                        className="justify-start gap-2 rounded-[30px] text-destructive"
                         onClick={() => handleDelete(l)}
                         disabled={deletingId === l.id}
                       >
                         <Trash2 className="h-4 w-4" />
+                        Excluir
                       </Button>
                     </ActionGuard>
                   </div>

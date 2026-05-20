@@ -6,11 +6,12 @@ import {
   DiaNaoCobrado,
   ItemLocacaoForm,
   Cliente,
+  TipoCobranca,
 } from "@/types";
 import {
   calcularDiasCobrados,
-  calcularValorTotal,
   formatCurrency,
+  tipoCobrancaLabel,
 } from "@/lib/calculos";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -29,20 +30,46 @@ type FotoEntregaPreview = {
   preview: string;
 };
 
+type EquipamentoComValores = Equipamento & {
+  valor_semanal?: number | string | null;
+  valor_mensal?: number | string | null;
+};
+
+type ItemLocacaoFormCompleto = ItemLocacaoForm & {
+  tipo_cobranca: TipoCobranca;
+};
+
+function getValorPorTipo(eq: EquipamentoComValores, tipo: TipoCobranca) {
+  if (tipo === "mensal") return Number(eq.valor_mensal || 0);
+  return Number(eq.valor_diaria || 0);
+}
+
+function addMeses(data: string, meses: number) {
+  if (!data) return "";
+
+  const d = new Date(data + "T12:00:00");
+  d.setMonth(d.getMonth() + meses);
+
+  return d.toISOString().split("T")[0];
+}
+
 export default function NovaLocacaoPage() {
   const navigate = useNavigate();
   const { blockedByBilling } = useBillingAccess();
   const { locadoraId } = useAuth();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
+  const [equipamentos, setEquipamentos] = useState<EquipamentoComValores[]>([]);
   const [feriados, setFeriados] = useState<DiaNaoCobrado[]>([]);
 
   const [clienteId, setClienteId] = useState("");
-  const [itens, setItens] = useState<ItemLocacaoForm[]>([]);
+  const [itens, setItens] = useState<ItemLocacaoFormCompleto[]>([]);
+  const [tipoCobrancaPadrao, setTipoCobrancaPadrao] =
+    useState<TipoCobranca>("diaria");
 
   const [dataInicio, setDataInicio] = useState("");
   const [dataPrevisao, setDataPrevisao] = useState("");
+  const [quantidadeMeses, setQuantidadeMeses] = useState(1);
   const [semPrevisaoDevolucao, setSemPrevisaoDevolucao] = useState(false);
 
   const [taxaEntrega, setTaxaEntrega] = useState(0);
@@ -64,6 +91,14 @@ export default function NovaLocacaoPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!dataInicio || semPrevisaoDevolucao) return;
+
+    if (tipoCobrancaPadrao === "mensal") {
+      setDataPrevisao(addMeses(dataInicio, quantidadeMeses));
+    }
+  }, [dataInicio, quantidadeMeses, tipoCobrancaPadrao, semPrevisaoDevolucao]);
+
   async function fetchData() {
     try {
       setLoading(true);
@@ -75,10 +110,7 @@ export default function NovaLocacaoPage() {
           .select("*")
           .eq("ativo", true)
           .order("nome"),
-        supabase
-          .from("dias_nao_cobrados")
-          .select("*")
-          .eq("ativo", true),
+        supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
       ]);
 
       if (c.error) {
@@ -99,9 +131,9 @@ export default function NovaLocacaoPage() {
         return;
       }
 
-      setClientes((c.data as Cliente[]) || []);
-      setEquipamentos((e.data as Equipamento[]) || []);
-      setFeriados((f.data as DiaNaoCobrado[]) || []);
+      setClientes((c.data as unknown as Cliente[]) || []);
+      setEquipamentos((e.data as unknown as EquipamentoComValores[]) || []);
+      setFeriados((f.data as unknown as DiaNaoCobrado[]) || []);
     } catch (error) {
       console.error("Erro inesperado ao carregar nova locação:", error);
       toast.error("Erro inesperado ao carregar dados");
@@ -110,7 +142,7 @@ export default function NovaLocacaoPage() {
     }
   }
 
-  function addItem(eq: Equipamento) {
+  function addItem(eq: EquipamentoComValores) {
     const existing = itens.find((i) => i.equipamento_id === eq.id);
 
     if (eq.quantidade_disponivel <= 0 && !existing) {
@@ -134,13 +166,16 @@ export default function NovaLocacaoPage() {
         )
       );
     } else {
+      const tipoPadrao: TipoCobranca = tipoCobrancaPadrao;
+
       setItens([
         ...itens,
         {
           equipamento_id: eq.id,
           equipamento_nome: eq.nome,
           quantidade_locada: 1,
-          valor_diaria_fechado: Number(eq.valor_diaria),
+          valor_diaria_fechado: getValorPorTipo(eq, tipoPadrao),
+          tipo_cobranca: tipoPadrao,
         },
       ]);
     }
@@ -191,6 +226,61 @@ export default function NovaLocacaoPage() {
     );
   }
 
+  function alterarTipoCobranca(eqId: string, tipo: TipoCobranca) {
+    const eq = equipamentos.find((e) => e.id === eqId);
+
+    setItens(
+      itens.map((i) => {
+        if (i.equipamento_id !== eqId) return i;
+
+        return {
+          ...i,
+          tipo_cobranca: tipo,
+          valor_diaria_fechado: eq
+            ? getValorPorTipo(eq, tipo)
+            : i.valor_diaria_fechado,
+        };
+      })
+    );
+  }
+
+  function alterarTipoCobrancaPadrao(tipo: TipoCobranca) {
+    setTipoCobrancaPadrao(tipo);
+
+    if (tipo === "diaria") {
+      setQuantidadeMeses(1);
+    }
+
+    setItens(
+      itens.map((item) => {
+        const eq = equipamentos.find((e) => e.id === item.equipamento_id);
+
+        return {
+          ...item,
+          tipo_cobranca: tipo,
+          valor_diaria_fechado: eq
+            ? getValorPorTipo(eq, tipo)
+            : item.valor_diaria_fechado,
+        };
+      })
+    );
+  }
+
+  function alterarValorFechado(eqId: string, value: string) {
+    const valor = Number(value);
+
+    setItens(
+      itens.map((i) =>
+        i.equipamento_id === eqId
+          ? {
+              ...i,
+              valor_diaria_fechado: Number.isNaN(valor) ? 0 : valor,
+            }
+          : i
+      )
+    );
+  }
+
   function handleSemPrevisaoDevolucao(value: boolean) {
     setSemPrevisaoDevolucao(value);
 
@@ -223,28 +313,53 @@ export default function NovaLocacaoPage() {
     });
   }
 
+  const dataPrevisaoCalculada = useMemo(() => {
+    if (semPrevisaoDevolucao) return "";
+
+    if (tipoCobrancaPadrao === "mensal") {
+      return addMeses(dataInicio, quantidadeMeses);
+    }
+
+    return dataPrevisao;
+  }, [
+    dataInicio,
+    dataPrevisao,
+    tipoCobrancaPadrao,
+    quantidadeMeses,
+    semPrevisaoDevolucao,
+  ]);
+
   const diasCobrados = useMemo(() => {
-    if (!dataInicio || !dataPrevisao || semPrevisaoDevolucao) return 0;
+    if (!dataInicio || !dataPrevisaoCalculada || semPrevisaoDevolucao) return 0;
 
     return calcularDiasCobrados(
       new Date(dataInicio + "T12:00:00"),
-      new Date(dataPrevisao + "T12:00:00"),
+      new Date(dataPrevisaoCalculada + "T12:00:00"),
       feriados,
       cobrarDomingo
     );
-  }, [dataInicio, dataPrevisao, semPrevisaoDevolucao, feriados, cobrarDomingo]);
+  }, [
+    dataInicio,
+    dataPrevisaoCalculada,
+    semPrevisaoDevolucao,
+    feriados,
+    cobrarDomingo,
+  ]);
 
   const valorTotal = useMemo(() => {
-    return calcularValorTotal(
-      itens.map((item) => ({
-        quantidade_locada: item.quantidade_locada,
-        valor_diaria_fechado: Number(item.valor_diaria_fechado),
-      })),
-      diasCobrados,
-      taxaEntrega,
-      valorDesconto
-    );
-  }, [itens, diasCobrados, taxaEntrega, valorDesconto]);
+    const totalItens = itens.reduce((soma, item) => {
+      const quantidade = Number(item.quantidade_locada || 0);
+      const valor = Number(item.valor_diaria_fechado || 0);
+
+      if (item.tipo_cobranca === "mensal") {
+        return soma + quantidade * valor * quantidadeMeses;
+      }
+
+      return soma + quantidade * valor * diasCobrados;
+    }, 0);
+
+    return totalItens + taxaEntrega - valorDesconto;
+  }, [itens, diasCobrados, quantidadeMeses, taxaEntrega, valorDesconto]);
 
   const saldo = valorTotal - valorEntrada;
 
@@ -336,7 +451,7 @@ export default function NovaLocacaoPage() {
       return;
     }
 
-    if (!semPrevisaoDevolucao && !dataPrevisao) {
+    if (!semPrevisaoDevolucao && !dataPrevisaoCalculada) {
       toast.error("Informe a previsão de devolução ou marque sem previsão");
       return;
     }
@@ -359,7 +474,9 @@ export default function NovaLocacaoPage() {
           cliente_id: clienteId,
           numero_contrato: numeroContrato,
           data_inicio: dataInicio,
-          data_previsao_entrega: semPrevisaoDevolucao ? null : dataPrevisao,
+          data_previsao_entrega: semPrevisaoDevolucao
+            ? null
+            : dataPrevisaoCalculada,
           taxa_entrega: taxaEntrega,
           valor_desconto: valorDesconto,
           valor_total_pago: valorEntrada,
@@ -383,11 +500,12 @@ export default function NovaLocacaoPage() {
         equipamento_id: i.equipamento_id,
         quantidade_locada: i.quantidade_locada,
         valor_diaria_fechado: i.valor_diaria_fechado,
+        tipo_cobranca: i.tipo_cobranca || "diaria",
         locadora_id: locadoraId,
         data_inicio_cobranca: dataInicio,
       }));
 
-      const { error: itensError } = await supabase
+      const { error: itensError } = await (supabase as any)
         .from("itens_locacao")
         .insert(itensInsert);
 
@@ -475,7 +593,7 @@ export default function NovaLocacaoPage() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <Label className="text-foreground">Data de início</Label>
+              <Label className="text-foreground">Data de entrega</Label>
               <Input
                 className="rounded-[30px]"
                 type="date"
@@ -484,7 +602,21 @@ export default function NovaLocacaoPage() {
               />
             </div>
 
-            {!semPrevisaoDevolucao && (
+            <div>
+              <Label className="text-foreground">Tipo de cobrança</Label>
+              <select
+                className="w-full rounded-[30px] border border-border bg-background px-4 py-2 text-foreground"
+                value={tipoCobrancaPadrao}
+                onChange={(e) =>
+                  alterarTipoCobrancaPadrao(e.target.value as TipoCobranca)
+                }
+              >
+                <option value="diaria">Diária</option>
+                <option value="mensal">Mensal</option>
+              </select>
+            </div>
+
+            {!semPrevisaoDevolucao && tipoCobrancaPadrao === "diaria" && (
               <div>
                 <Label className="text-foreground">
                   Previsão de devolução
@@ -497,6 +629,36 @@ export default function NovaLocacaoPage() {
                 />
               </div>
             )}
+
+            {!semPrevisaoDevolucao && tipoCobrancaPadrao === "mensal" && (
+              <div>
+                <Label className="text-foreground">Quantidade de meses</Label>
+                <Input
+                  className="rounded-[30px]"
+                  type="number"
+                  min={1}
+                  value={quantidadeMeses}
+                  onChange={(e) =>
+                    setQuantidadeMeses(Number(e.target.value) || 1)
+                  }
+                />
+              </div>
+            )}
+
+            {!semPrevisaoDevolucao &&
+              tipoCobrancaPadrao === "mensal" &&
+              dataPrevisaoCalculada && (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Devolução prevista
+                  </p>
+                  <p className="font-semibold text-foreground">
+                    {new Date(
+                      dataPrevisaoCalculada + "T12:00:00"
+                    ).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+              )}
 
             <div className="flex items-center justify-between rounded-2xl border border-border p-4">
               <div>
@@ -593,8 +755,9 @@ export default function NovaLocacaoPage() {
                   {eq.nome}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(Number(eq.valor_diaria))}/dia • Estoque:{" "}
-                  {eq.quantidade_disponivel}
+                  Diária: {formatCurrency(Number(eq.valor_diaria || 0))} •{" "}
+                  Mensal: {formatCurrency(Number(eq.valor_mensal || 0))} •{" "}
+                  Estoque: {eq.quantidade_disponivel}
                 </p>
               </button>
             ))}
@@ -608,50 +771,38 @@ export default function NovaLocacaoPage() {
                 );
                 const estoque = eq?.quantidade_disponivel || 0;
 
+                const periodoTexto =
+                  item.tipo_cobranca === "mensal"
+                    ? `${quantidadeMeses} mensalidade${
+                        quantidadeMeses === 1 ? "" : "s"
+                      }`
+                    : `${diasCobrados} diária${
+                        diasCobrados === 1 ? "" : "s"
+                      }`;
+
+                const subtotal =
+                  Number(item.quantidade_locada || 0) *
+                  Number(item.valor_diaria_fechado || 0) *
+                  (item.tipo_cobranca === "mensal"
+                    ? quantidadeMeses
+                    : diasCobrados);
+
                 return (
                   <div
                     key={item.equipamento_id}
-                    className="flex items-center justify-between rounded-2xl bg-secondary p-4"
+                    className="space-y-4 rounded-2xl bg-secondary p-4"
                   >
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {item.equipamento_nome}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCurrency(Number(item.valor_diaria_fechado))} por
-                        diária • Estoque: {estoque}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => updateQty(item.equipamento_id, -1)}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-
-                      <Input
-                        type="number"
-                        min={1}
-                        max={estoque}
-                        value={item.quantidade_locada}
-                        onChange={(e) =>
-                          setManualQty(item.equipamento_id, e.target.value)
-                        }
-                        className="h-9 w-20 text-center"
-                      />
-
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => updateQty(item.equipamento_id, 1)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {item.equipamento_nome}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(Number(item.valor_diaria_fechado))} por{" "}
+                          {tipoCobrancaLabel(item.tipo_cobranca).toLowerCase()} •{" "}
+                          Estoque: {estoque}
+                        </p>
+                      </div>
 
                       <Button
                         type="button"
@@ -661,6 +812,89 @@ export default function NovaLocacaoPage() {
                       >
                         <X className="h-4 w-4" />
                       </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <Label>Tipo de cobrança</Label>
+                        <select
+                          className="mt-2 w-full rounded-[30px] border border-border bg-background px-4 py-2 text-foreground"
+                          value={item.tipo_cobranca || "diaria"}
+                          onChange={(e) =>
+                            alterarTipoCobranca(
+                              item.equipamento_id,
+                              e.target.value as TipoCobranca
+                            )
+                          }
+                        >
+                          <option value="diaria">Diária</option>
+                          <option value="mensal">Mensal</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label>Valor fechado</Label>
+                        <Input
+                          className="mt-2 rounded-[30px]"
+                          type="number"
+                          step="0.01"
+                          value={item.valor_diaria_fechado}
+                          onChange={(e) =>
+                            alterarValorFechado(
+                              item.equipamento_id,
+                              e.target.value
+                            )
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <Label>Quantidade</Label>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => updateQty(item.equipamento_id, -1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+
+                          <Input
+                            type="number"
+                            min={1}
+                            max={estoque}
+                            value={item.quantidade_locada}
+                            onChange={(e) =>
+                              setManualQty(
+                                item.equipamento_id,
+                                e.target.value
+                              )
+                            }
+                            className="h-9 w-20 text-center"
+                          />
+
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => updateQty(item.equipamento_id, 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground">
+                      Períodos cobrados:{" "}
+                      <span className="font-semibold text-foreground">
+                        {semPrevisaoDevolucao ? "Sem previsão" : periodoTexto}
+                      </span>{" "}
+                      • Subtotal:{" "}
+                      <span className="font-semibold text-primary">
+                        {formatCurrency(subtotal)}
+                      </span>
                     </div>
                   </div>
                 );
@@ -728,11 +962,39 @@ export default function NovaLocacaoPage() {
           <h2 className="text-lg font-semibold text-foreground">Resumo</h2>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Dias cobrados</span>
+            <span className="text-muted-foreground">
+              {tipoCobrancaPadrao === "mensal"
+                ? "Meses cobrados"
+                : "Dias cobrados"}
+            </span>
             <span className="font-medium text-foreground">
-              {semPrevisaoDevolucao ? "Sem previsão" : diasCobrados}
+              {semPrevisaoDevolucao
+                ? "Sem previsão"
+                : tipoCobrancaPadrao === "mensal"
+                ? quantidadeMeses
+                : diasCobrados}
             </span>
           </div>
+
+          {!semPrevisaoDevolucao && dataInicio && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Data de entrega</span>
+              <span className="font-medium text-foreground">
+                {new Date(dataInicio + "T12:00:00").toLocaleDateString("pt-BR")}
+              </span>
+            </div>
+          )}
+
+          {!semPrevisaoDevolucao && dataPrevisaoCalculada && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Data de devolução</span>
+              <span className="font-medium text-foreground">
+                {new Date(
+                  dataPrevisaoCalculada + "T12:00:00"
+                ).toLocaleDateString("pt-BR")}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Valor total</span>

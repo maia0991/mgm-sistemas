@@ -20,12 +20,20 @@ interface ClienteComprovante {
   endereco_obra: string | null;
 }
 
+interface EquipamentoComprovante {
+  id: string;
+  nome: string;
+  valor_diaria?: number | string | null;
+}
+
 interface ItemLocacaoComprovante {
   id?: string;
   equipamento_id: string;
   quantidade_locada: number;
   valor_diaria_fechado: number | string;
+  tipo_cobranca?: string | null;
   data_inicio_cobranca?: string | null;
+  equipamentos?: EquipamentoComprovante | null;
 }
 
 interface LocacaoComprovante {
@@ -42,11 +50,6 @@ interface LocacaoComprovante {
   itens_locacao: ItemLocacaoComprovante[];
 }
 
-interface EquipamentoComprovante {
-  id: string;
-  nome: string;
-}
-
 interface PerfilEmpresa {
   nome_empresa?: string | null;
   responsavel?: string | null;
@@ -57,13 +60,41 @@ interface PerfilEmpresa {
   endereco?: string | null;
 }
 
+function normalizarTipo(tipo?: string | null): "diaria" | "mensal" {
+  if (tipo === "mensal") return "mensal";
+  return "diaria";
+}
+
+function isDataDepois(dataA: string, dataB: string) {
+  return (
+    new Date(dataA + "T12:00:00").getTime() >
+    new Date(dataB + "T12:00:00").getTime()
+  );
+}
+
+function calcularMesesEntre(dataInicio?: string | null, dataFim?: string | null) {
+  if (!dataInicio || !dataFim) return 1;
+
+  const inicio = new Date(dataInicio + "T12:00:00");
+  const fim = new Date(dataFim + "T12:00:00");
+
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) {
+    return 1;
+  }
+
+  const meses =
+    (fim.getFullYear() - inicio.getFullYear()) * 12 +
+    (fim.getMonth() - inicio.getMonth());
+
+  return Math.max(1, meses || 1);
+}
+
 export default function ComprovanteLocacaoPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [locacao, setLocacao] = useState<LocacaoComprovante | null>(null);
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null);
-  const [equipamentos, setEquipamentos] = useState<EquipamentoComprovante[]>([]);
   const [diasNaoCobrados, setDiasNaoCobrados] = useState<DiaNaoCobrado[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataDevolucaoVisual, setDataDevolucaoVisual] = useState("");
@@ -78,14 +109,28 @@ export default function ComprovanteLocacaoPage() {
     try {
       setLoading(true);
 
-      const [locacaoRes, perfilRes, equipamentosRes, diasRes] = await Promise.all([
+      const [locacaoRes, perfilRes, diasRes] = await Promise.all([
         supabase
           .from("locacoes")
-          .select("*, clientes(*), itens_locacao(*)")
+          .select(
+            `
+            *,
+            clientes(*),
+            itens_locacao(
+              *,
+              equipamentos(
+                id,
+                nome,
+                valor_diaria
+              )
+            )
+          `
+          )
           .eq("id", id)
           .single(),
+
         supabase.from("perfil_empresa").select("*").maybeSingle(),
-        supabase.from("equipamentos").select("id, nome"),
+
         supabase
           .from("dias_nao_cobrados")
           .select("*")
@@ -102,20 +147,15 @@ export default function ComprovanteLocacaoPage() {
         console.error("Erro ao carregar perfil da empresa:", perfilRes.error);
       }
 
-      if (equipamentosRes.error) {
-        console.error("Erro ao carregar equipamentos:", equipamentosRes.error);
-      }
-
       if (diasRes.error) {
         console.error("Erro ao carregar dias não cobrados:", diasRes.error);
       }
 
-      const locacaoData = locacaoRes.data as LocacaoComprovante;
+      const locacaoData = locacaoRes.data as unknown as LocacaoComprovante;
 
       setLocacao(locacaoData);
       setDataDevolucaoVisual(locacaoData.data_previsao_entrega || "");
       setPerfilEmpresa((perfilRes.data as PerfilEmpresa | null) ?? null);
-      setEquipamentos((equipamentosRes.data as EquipamentoComprovante[]) || []);
       setDiasNaoCobrados((diasRes.data as DiaNaoCobrado[]) || []);
     } catch (error) {
       console.error("Erro inesperado ao carregar comprovante:", error);
@@ -125,16 +165,66 @@ export default function ComprovanteLocacaoPage() {
     }
   }
 
+  const temMensalidade = useMemo(() => {
+    if (!locacao) return false;
+
+    return (locacao.itens_locacao || []).some(
+      (item) => normalizarTipo(item.tipo_cobranca) === "mensal"
+    );
+  }, [locacao]);
+
+  const mesesContrato = useMemo(() => {
+    if (!locacao) return 1;
+
+    return calcularMesesEntre(locacao.data_inicio, locacao.data_previsao_entrega);
+  }, [locacao]);
+
   const itensComNome = useMemo(() => {
     if (!locacao || !dataDevolucaoVisual) return [];
 
+    const vencimento = locacao.data_previsao_entrega;
+    const passouDoVencimento =
+      temMensalidade &&
+      vencimento &&
+      isDataDepois(dataDevolucaoVisual, vencimento);
+
     return locacao.itens_locacao.map((item) => {
-      const equipamento = equipamentos.find((e) => e.id === item.equipamento_id);
-      const nome = equipamento?.nome || "Equipamento";
+      const tipo = normalizarTipo(item.tipo_cobranca);
+      const nome = item.equipamentos?.nome || "Equipamento";
       const qtd = Number(item.quantidade_locada || 0);
-      const diaria = Number(item.valor_diaria_fechado || 0);
+      const valorFechado = Number(item.valor_diaria_fechado || 0);
+      const valorDiariaExtra = Number(item.equipamentos?.valor_diaria || 0);
       const dataInicioCobranca =
         item.data_inicio_cobranca || locacao.data_inicio;
+
+      if (tipo === "mensal") {
+        const diasExtras =
+          passouDoVencimento && vencimento
+            ? calcularDiasCobrados(
+                new Date(vencimento + "T12:00:00"),
+                new Date(dataDevolucaoVisual + "T12:00:00"),
+                diasNaoCobrados,
+                locacao.cobrar_domingo
+              )
+            : 0;
+
+        const subtotalMensal = qtd * valorFechado * mesesContrato;
+        const subtotalExtras = qtd * valorDiariaExtra * diasExtras;
+
+        return {
+          ...item,
+          nome,
+          tipo,
+          qtd,
+          valorFechado,
+          valorDiariaExtra,
+          dataInicioCobranca,
+          diasItem: 0,
+          diasExtras,
+          mesesContrato,
+          subtotal: subtotalMensal + subtotalExtras,
+        };
+      }
 
       const diasItem = calcularDiasCobrados(
         new Date(dataInicioCobranca + "T12:00:00"),
@@ -146,14 +236,24 @@ export default function ComprovanteLocacaoPage() {
       return {
         ...item,
         nome,
+        tipo,
         qtd,
-        diaria,
+        valorFechado,
+        valorDiariaExtra,
         dataInicioCobranca,
         diasItem,
-        subtotal: qtd * diaria * diasItem,
+        diasExtras: 0,
+        mesesContrato: 0,
+        subtotal: qtd * valorFechado * diasItem,
       };
     });
-  }, [locacao, equipamentos, diasNaoCobrados, dataDevolucaoVisual]);
+  }, [
+    locacao,
+    diasNaoCobrados,
+    dataDevolucaoVisual,
+    temMensalidade,
+    mesesContrato,
+  ]);
 
   const subtotalItens = useMemo(() => {
     return itensComNome.reduce((soma, item) => soma + item.subtotal, 0);
@@ -244,7 +344,8 @@ export default function ComprovanteLocacaoPage() {
                 <strong>TELEFONE:</strong> {locacao.clientes?.whatsapp || "—"}
               </p>
               <p>
-                <strong>ENDEREÇO:</strong> {locacao.clientes?.endereco_obra || "—"}
+                <strong>ENDEREÇO:</strong>{" "}
+                {locacao.clientes?.endereco_obra || "—"}
               </p>
             </div>
           </div>
@@ -272,6 +373,13 @@ export default function ComprovanteLocacaoPage() {
                   {formatDate(dataDevolucaoVisual)}
                 </p>
               </div>
+
+              {temMensalidade && (
+                <p>
+                  <strong>TIPO:</strong> Mensalidade ({mesesContrato}{" "}
+                  {mesesContrato === 1 ? "mês" : "meses"})
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -281,7 +389,7 @@ export default function ComprovanteLocacaoPage() {
             <tr className="border-b-2 border-black text-left text-[11px] font-black uppercase">
               <th className="py-2">Equipamento</th>
               <th className="py-2 text-center">Qtd</th>
-              <th className="py-2 text-right">Diária</th>
+              <th className="py-2 text-right">Valor</th>
               <th className="py-2 text-right">Subtotal</th>
             </tr>
           </thead>
@@ -291,9 +399,7 @@ export default function ComprovanteLocacaoPage() {
               <tr key={index}>
                 <td className="py-3">
                   <div className="flex flex-col">
-                    <span className="font-semibold uppercase">
-                      {item.nome}
-                    </span>
+                    <span className="font-semibold uppercase">{item.nome}</span>
 
                     {item.dataInicioCobranca &&
                       item.dataInicioCobranca !== locacao.data_inicio && (
@@ -301,11 +407,34 @@ export default function ComprovanteLocacaoPage() {
                           Complemento em {formatDate(item.dataInicioCobranca)}
                         </span>
                       )}
+
+                    {item.tipo === "mensal" ? (
+                      <span className="text-[10px] font-bold uppercase text-blue-600">
+                        {item.mesesContrato}{" "}
+                        {item.mesesContrato === 1 ? "mensalidade" : "mensalidades"}
+                        {item.diasExtras > 0
+                          ? ` + ${item.diasExtras} diária(s) extra(s)`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase text-blue-600">
+                        {item.diasItem} diária(s)
+                      </span>
+                    )}
                   </div>
                 </td>
 
                 <td className="py-3 text-center">{item.qtd}</td>
-                <td className="py-3 text-right">{formatCurrency(item.diaria)}</td>
+
+                <td className="py-3 text-right">
+                  {formatCurrency(item.valorFechado)}
+                  {item.tipo === "mensal" && item.diasExtras > 0 && (
+                    <div className="text-[10px] text-gray-500">
+                      Extra: {formatCurrency(item.valorDiariaExtra)} / diária
+                    </div>
+                  )}
+                </td>
+
                 <td className="py-3 text-right font-bold">
                   {formatCurrency(item.subtotal)}
                 </td>
@@ -345,9 +474,7 @@ export default function ComprovanteLocacaoPage() {
               <td colSpan={3} className="pt-2 text-right text-[11px] uppercase">
                 Total:
               </td>
-              <td className="pt-2 text-right">
-                {formatCurrency(valorTotal)}
-              </td>
+              <td className="pt-2 text-right">{formatCurrency(valorTotal)}</td>
             </tr>
 
             {valorPago > 0 && (

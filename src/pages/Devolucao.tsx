@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { Search, CheckCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
+type TipoCobranca = "diaria" | "mensal";
+
 type DiaNaoCobradoItem = {
   id: string;
   data: string | null;
@@ -34,12 +36,19 @@ type ClienteResumo = {
   nome_completo: string | null;
 };
 
+type EquipamentoResumo = {
+  id: string;
+  valor_diaria?: number | string | null;
+};
+
 type ItemLocacaoComData = {
   id?: string;
   equipamento_id: string;
   quantidade_locada: number | string;
   valor_diaria_fechado: number | string | null;
+  tipo_cobranca?: TipoCobranca | string | null;
   data_inicio_cobranca?: string | null;
+  equipamentos?: EquipamentoResumo | null;
 };
 
 type LocacaoComClienteItem = {
@@ -60,14 +69,77 @@ type LocacaoComClienteItem = {
   itens_locacao: ItemLocacaoComData[];
 };
 
+function normalizarTipo(tipo?: string | null): TipoCobranca {
+  if (tipo === "mensal") return "mensal";
+  return "diaria";
+}
+
+function isDataDepois(dataA: string, dataB: string) {
+  return new Date(dataA + "T12:00:00").getTime() > new Date(dataB + "T12:00:00").getTime();
+}
+
 function calcularValorLocacaoPorItens(
   locacao: LocacaoComClienteItem,
   dataFinal: string,
   feriados: DiaNaoCobradoItem[]
 ) {
   const itens = locacao.itens_locacao || [];
+  const dataVencimento = locacao.data_previsao_entrega;
+  const valorContratoFechado = Number(locacao.valor_total_final || 0);
 
-  return itens.reduce((soma, item) => {
+  const temItemMensal = itens.some(
+    (item) => normalizarTipo(item.tipo_cobranca) === "mensal"
+  );
+
+  if (temItemMensal) {
+    const valorBaseContrato =
+      valorContratoFechado -
+      Number(locacao.taxa_entrega || 0) +
+      Number(locacao.valor_desconto || 0);
+
+    if (!dataVencimento || !isDataDepois(dataFinal, dataVencimento)) {
+      return {
+        subtotalItens: valorBaseContrato,
+        diasExtras: 0,
+        valorExtras: 0,
+      };
+    }
+
+    const valorExtras = itens.reduce((soma, item) => {
+      const tipo = normalizarTipo(item.tipo_cobranca);
+
+      if (tipo !== "mensal") return soma;
+
+      const diasExtras = calcularDiasCobrados(
+        new Date(dataVencimento + "T12:00:00"),
+        new Date(dataFinal + "T12:00:00"),
+        feriados as never,
+        !!locacao.cobrar_domingo
+      );
+
+      return (
+        soma +
+        Number(item.quantidade_locada || 0) *
+          Number(item.equipamentos?.valor_diaria || 0) *
+          diasExtras
+      );
+    }, 0);
+
+    const diasExtras = calcularDiasCobrados(
+      new Date(dataVencimento + "T12:00:00"),
+      new Date(dataFinal + "T12:00:00"),
+      feriados as never,
+      !!locacao.cobrar_domingo
+    );
+
+    return {
+      subtotalItens: valorBaseContrato + valorExtras,
+      diasExtras,
+      valorExtras,
+    };
+  }
+
+  const subtotalItens = itens.reduce((soma, item) => {
     const inicio = item.data_inicio_cobranca || locacao.data_inicio;
 
     const dias = calcularDiasCobrados(
@@ -84,6 +156,12 @@ function calcularValorLocacaoPorItens(
         dias
     );
   }, 0);
+
+  return {
+    subtotalItens,
+    diasExtras: 0,
+    valorExtras: 0,
+  };
 }
 
 export default function DevolucaoPage() {
@@ -119,7 +197,19 @@ export default function DevolucaoPage() {
       const [l, f] = await Promise.all([
         supabase
           .from("locacoes")
-          .select("*, clientes(*), itens_locacao(*)")
+          .select(
+            `
+            *,
+            clientes(*),
+            itens_locacao(
+              *,
+              equipamentos(
+                id,
+                valor_diaria
+              )
+            )
+          `
+          )
           .eq("situacao", "ativo")
           .order("data_previsao_entrega", { ascending: true }),
         supabase
@@ -140,8 +230,8 @@ export default function DevolucaoPage() {
         return;
       }
 
-      setLocacoes((l.data as LocacaoComClienteItem[]) || []);
-      setFeriados((f.data as DiaNaoCobradoItem[]) || []);
+      setLocacoes((l.data as unknown as LocacaoComClienteItem[]) || []);
+      setFeriados((f.data as unknown as DiaNaoCobradoItem[]) || []);
     } catch (error) {
       console.error("Erro inesperado ao carregar devoluções:", error);
       toast.error("Erro inesperado ao carregar devoluções");
@@ -177,11 +267,13 @@ export default function DevolucaoPage() {
       !!selectedLocacao.cobrar_domingo
     );
 
-    const subtotalItens = calcularValorLocacaoPorItens(
+    const resultadoItens = calcularValorLocacaoPorItens(
       selectedLocacao,
       dataDevolucao,
       feriados
     );
+
+    const subtotalItens = resultadoItens.subtotalItens;
 
     const valorCalculado =
       subtotalItens +
@@ -193,7 +285,14 @@ export default function DevolucaoPage() {
     const entrada = Number(selectedLocacao.valor_total_pago || 0);
     const saldo = valorCalculado - entrada;
 
-    return { diasReais, valorCalculado, entrada, saldo };
+    return {
+      diasReais,
+      diasExtras: resultadoItens.diasExtras,
+      valorExtras: resultadoItens.valorExtras,
+      valorCalculado,
+      entrada,
+      saldo,
+    };
   }, [
     selectedLocacao,
     dataDevolucao,
@@ -504,12 +603,34 @@ export default function DevolucaoPage() {
                   <div className="space-y-2 rounded-2xl border border-primary/20 bg-primary/5 p-4">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
-                        Dias cobrados
+                        Dias totais
                       </span>
                       <span className="font-medium text-foreground">
                         {baixaPreview.diasReais}
                       </span>
                     </div>
+
+                    {baixaPreview.diasExtras > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Diárias extras após vencimento
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {baixaPreview.diasExtras}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Valor das diárias extras
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {formatCurrency(baixaPreview.valorExtras)}
+                          </span>
+                        </div>
+                      </>
+                    )}
 
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">

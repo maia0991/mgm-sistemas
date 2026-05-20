@@ -71,3 +71,23 @@ export function maskCpfCnpj(value: string) {
 
   return maskCNPJ(v);
 }
+
+export function maskMoney(value: string | number) {
+  const only = String(value).replace(/\D/g, "");
+
+  const number = Number(only) / 100;
+
+  return number.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+export function unmaskMoney(value: string) {
+  return Number(
+    value
+      .replace(/\./g, "")
+      .replace(",", ".")
+      .replace(/[^\d.-]/g, "")
+  );
+}

@@ -7,8 +7,9 @@ import {
   formatCurrency,
   formatDate,
   calcularDiasCobrados,
+  tipoCobrancaLabel,
 } from "@/lib/calculos";
-import { DiaNaoCobrado } from "@/types";
+import { DiaNaoCobrado, TipoCobranca } from "@/types";
 import { toast } from "sonner";
 
 interface ClienteContrato {
@@ -19,12 +20,20 @@ interface ClienteContrato {
   endereco_obra: string | null;
 }
 
+interface EquipamentoContrato {
+  id: string;
+  nome: string;
+  valor_diaria?: number | string | null;
+}
+
 interface ItemLocacaoContrato {
   id?: string;
   equipamento_id: string;
   quantidade_locada: number;
   valor_diaria_fechado: number | string;
+  tipo_cobranca?: TipoCobranca | string | null;
   data_inicio_cobranca?: string | null;
+  equipamentos?: EquipamentoContrato | null;
 }
 
 interface LocacaoContrato {
@@ -39,11 +48,6 @@ interface LocacaoContrato {
   cobrar_domingo: boolean;
   clientes: ClienteContrato | null;
   itens_locacao: ItemLocacaoContrato[];
-}
-
-interface EquipamentoContrato {
-  id: string;
-  nome: string;
 }
 
 interface PerfilEmpresa {
@@ -61,13 +65,34 @@ interface FotoEntregaContrato {
   url_foto: string;
 }
 
+function normalizarTipo(tipo?: string | null): TipoCobranca {
+  if (tipo === "mensal") return "mensal";
+  return "diaria";
+}
+
+function calcularMesesEntre(dataInicio?: string | null, dataFim?: string | null) {
+  if (!dataInicio || !dataFim) return 1;
+
+  const inicio = new Date(dataInicio + "T12:00:00");
+  const fim = new Date(dataFim + "T12:00:00");
+
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) {
+    return 1;
+  }
+
+  const meses =
+    (fim.getFullYear() - inicio.getFullYear()) * 12 +
+    (fim.getMonth() - inicio.getMonth());
+
+  return Math.max(1, meses || 1);
+}
+
 export default function ContratoPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [locacao, setLocacao] = useState<LocacaoContrato | null>(null);
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null);
-  const [equipamentos, setEquipamentos] = useState<EquipamentoContrato[]>([]);
   const [diasNaoCobrados, setDiasNaoCobrados] = useState<DiaNaoCobrado[]>([]);
   const [fotosEntrega, setFotosEntrega] = useState<FotoEntregaContrato[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,25 +107,35 @@ export default function ContratoPage() {
     try {
       setLoading(true);
 
-      const [locacaoRes, perfilRes, equipamentosRes, diasRes, fotosRes] =
-        await Promise.all([
-          supabase
-            .from("locacoes")
-            .select("*, clientes(*), itens_locacao(*)")
-            .eq("id", id)
-            .single(),
+      const [locacaoRes, perfilRes, diasRes, fotosRes] = await Promise.all([
+        supabase
+          .from("locacoes")
+          .select(
+            `
+            *,
+            clientes(*),
+            itens_locacao(
+              *,
+              equipamentos(
+                id,
+                nome,
+                valor_diaria
+              )
+            )
+          `
+          )
+          .eq("id", id)
+          .single(),
 
-          supabase.from("perfil_empresa").select("*").maybeSingle(),
+        supabase.from("perfil_empresa").select("*").maybeSingle(),
 
-          supabase.from("equipamentos").select("id, nome"),
+        supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
 
-          supabase.from("dias_nao_cobrados").select("*").eq("ativo", true),
-
-          (supabase as any)
-            .from("fotos_entrega_locacao")
-            .select("id, url_foto")
-            .eq("locacao_id", id),
-        ]);
+        (supabase as any)
+          .from("fotos_entrega_locacao")
+          .select("id, url_foto")
+          .eq("locacao_id", id),
+      ]);
 
       if (locacaoRes.error || !locacaoRes.data) {
         console.error("Erro ao carregar contrato:", locacaoRes.error);
@@ -112,21 +147,17 @@ export default function ContratoPage() {
         console.error("Erro ao carregar perfil da empresa:", perfilRes.error);
       }
 
-      if (equipamentosRes.error) {
-        console.error("Erro ao carregar equipamentos:", equipamentosRes.error);
-      }
-
       if (diasRes.error) {
         console.error("Erro ao carregar dias não cobrados:", diasRes.error);
       }
 
       if (fotosRes.error) {
-        console.error("Erro ao carregar Fotos do Equipamento no ato da entrega:", fotosRes.error);
+        console.error("Erro ao carregar fotos da entrega:", fotosRes.error);
       }
 
-      const fotosBanco = ((fotosRes.data as FotoEntregaContrato[]) || []).filter(
-        Boolean
-      );
+      const fotosBanco = (
+        (fotosRes.data as unknown as FotoEntregaContrato[]) || []
+      ).filter(Boolean);
 
       const fotosComUrl = await Promise.all(
         fotosBanco.map(async (foto) => {
@@ -152,10 +183,11 @@ export default function ContratoPage() {
         })
       );
 
-      setLocacao(locacaoRes.data as LocacaoContrato);
-      setPerfilEmpresa((perfilRes.data as PerfilEmpresa | null) ?? null);
-      setEquipamentos((equipamentosRes.data as EquipamentoContrato[]) || []);
-      setDiasNaoCobrados((diasRes.data as DiaNaoCobrado[]) || []);
+      setLocacao(locacaoRes.data as unknown as LocacaoContrato);
+      setPerfilEmpresa(
+        (perfilRes.data as unknown as PerfilEmpresa | null) ?? null
+      );
+      setDiasNaoCobrados((diasRes.data as unknown as DiaNaoCobrado[]) || []);
       setFotosEntrega(fotosComUrl);
     } catch (error) {
       console.error("Erro inesperado ao carregar contrato:", error);
@@ -167,15 +199,22 @@ export default function ContratoPage() {
 
   const dataFimCalculo = locacao?.data_previsao_entrega || locacao?.data_inicio;
 
+  const mesesContrato = useMemo(() => {
+    if (!locacao) return 1;
+    return calcularMesesEntre(locacao.data_inicio, locacao.data_previsao_entrega);
+  }, [locacao]);
+
   const itensComNome = useMemo(() => {
     if (!locacao) return [];
 
-    return locacao.itens_locacao.map((item) => {
-      const equipamento = equipamentos.find((e) => e.id === item.equipamento_id);
-      const nome = equipamento?.nome || "Equipamento";
+    return (locacao.itens_locacao || []).map((item) => {
+      const tipo = normalizarTipo(item.tipo_cobranca);
+      const nome = item.equipamentos?.nome || "Equipamento";
       const qtd = Number(item.quantidade_locada || 0);
-      const diaria = Number(item.valor_diaria_fechado || 0);
-      const dataInicioCobranca = item.data_inicio_cobranca || locacao.data_inicio;
+      const valorPeriodo = Number(item.valor_diaria_fechado || 0);
+
+      const dataInicioCobranca =
+        item.data_inicio_cobranca || locacao.data_inicio;
 
       const diasItem = locacao.data_previsao_entrega
         ? calcularDiasCobrados(
@@ -186,17 +225,26 @@ export default function ContratoPage() {
           )
         : 0;
 
+      const periodos = tipo === "mensal" ? mesesContrato : diasItem;
+
+      const subtotal =
+        tipo === "mensal"
+          ? qtd * valorPeriodo * mesesContrato
+          : qtd * valorPeriodo * diasItem;
+
       return {
         ...item,
         nome,
         qtd,
-        diaria,
+        tipo,
+        valorPeriodo,
         dataInicioCobranca,
         diasItem,
-        subtotal: qtd * diaria * diasItem,
+        periodos,
+        subtotal,
       };
     });
-  }, [locacao, equipamentos, diasNaoCobrados]);
+  }, [locacao, diasNaoCobrados, mesesContrato]);
 
   const diasEfetivos = useMemo(() => {
     if (!locacao || !dataFimCalculo || !locacao.data_previsao_entrega) return 0;
@@ -227,6 +275,16 @@ export default function ContratoPage() {
 
   function handlePrint() {
     window.print();
+  }
+
+  function textoPeriodo(item: (typeof itensComNome)[number]) {
+    if (!locacao?.data_previsao_entrega) return "A calcular";
+
+    if (item.tipo === "mensal") {
+      return `${item.periodos} mensalidade${item.periodos === 1 ? "" : "s"}`;
+    }
+
+    return `${item.diasItem} diária${item.diasItem === 1 ? "" : "s"}`;
   }
 
   if (loading) {
@@ -327,8 +385,13 @@ export default function ContratoPage() {
               </p>
               <p className="font-black uppercase italic text-blue-700">
                 <strong>
-                  Diárias:{" "}
-                  {locacao.data_previsao_entrega ? diasEfetivos : "Sem previsão"}
+                  {itensComNome.some((item) => item.tipo === "mensal")
+                    ? `Meses cobrados: ${mesesContrato}`
+                    : `Dias cobrados: ${
+                        locacao.data_previsao_entrega
+                          ? diasEfetivos
+                          : "Sem previsão"
+                      }`}
                 </strong>
               </p>
             </div>
@@ -340,7 +403,8 @@ export default function ContratoPage() {
             <tr className="border-b-2 border-black text-left text-[11px] font-black uppercase">
               <th className="py-2">Equipamento</th>
               <th className="py-2 text-center">Qtd</th>
-              <th className="py-2 text-right">Diária</th>
+              <th className="py-2 text-center">Cobrança</th>
+              <th className="py-2 text-right">Valor</th>
               <th className="py-2 text-right">Subtotal</th>
             </tr>
           </thead>
@@ -355,9 +419,21 @@ export default function ContratoPage() {
                       Complemento em {formatDate(item.dataInicioCobranca)}
                     </div>
                   )}
+                  <div className="mt-1 text-[10px] font-normal normal-case text-gray-500">
+                    {textoPeriodo(item)}
+                  </div>
                 </td>
+
                 <td className="py-3 text-center">{item.qtd}</td>
-                <td className="py-3 text-right">{formatCurrency(item.diaria)}</td>
+
+                <td className="py-3 text-center">
+                  {tipoCobrancaLabel(item.tipo)}
+                </td>
+
+                <td className="py-3 text-right">
+                  {formatCurrency(item.valorPeriodo)}
+                </td>
+
                 <td className="py-3 text-right font-bold">
                   {locacao.data_previsao_entrega
                     ? formatCurrency(item.subtotal)
@@ -369,7 +445,7 @@ export default function ContratoPage() {
 
           <tfoot className="border-t-2 border-black font-bold">
             <tr>
-              <td colSpan={3} className="pt-4 text-right text-[10px] uppercase">
+              <td colSpan={4} className="pt-4 text-right text-[10px] uppercase">
                 Subtotal Itens:
               </td>
               <td className="pt-4 text-right">{formatCurrency(subtotalItens)}</td>
@@ -377,7 +453,10 @@ export default function ContratoPage() {
 
             {taxaEntrega > 0 && (
               <tr>
-                <td colSpan={3} className="pt-1 text-right text-[10px] uppercase text-blue-700">
+                <td
+                  colSpan={4}
+                  className="pt-1 text-right text-[10px] uppercase text-blue-700"
+                >
                   Taxa de Entrega / Frete:
                 </td>
                 <td className="pt-1 text-right text-blue-700">
@@ -388,7 +467,7 @@ export default function ContratoPage() {
 
             {valorDesconto > 0 && (
               <tr className="text-rose-600">
-                <td colSpan={3} className="pt-1 text-right text-[10px] uppercase">
+                <td colSpan={4} className="pt-1 text-right text-[10px] uppercase">
                   (-) Desconto Especial:
                 </td>
                 <td className="pt-1 text-right font-black">
@@ -398,7 +477,7 @@ export default function ContratoPage() {
             )}
 
             <tr className="border-t border-gray-300">
-              <td colSpan={3} className="pt-2 text-right text-[11px] uppercase">
+              <td colSpan={4} className="pt-2 text-right text-[11px] uppercase">
                 Total Bruto:
               </td>
               <td className="pt-2 text-right">
@@ -408,7 +487,7 @@ export default function ContratoPage() {
 
             {valorPagoNaSaida > 0 && (
               <tr className="italic text-rose-600">
-                <td colSpan={3} className="pt-1 text-right text-[10px] uppercase">
+                <td colSpan={4} className="pt-1 text-right text-[10px] uppercase">
                   (-) Valor Recebido (Entrada):
                 </td>
                 <td className="pt-1 text-right font-black">
@@ -418,7 +497,10 @@ export default function ContratoPage() {
             )}
 
             <tr className="text-xl">
-              <td colSpan={3} className="pt-4 text-right font-black uppercase text-blue-700">
+              <td
+                colSpan={4}
+                className="pt-4 text-right font-black uppercase text-blue-700"
+              >
                 Saldo Final a Pagar:
               </td>
               <td className="border-b-4 border-blue-700 pt-4 text-right font-mono font-black text-blue-700">

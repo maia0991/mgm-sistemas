@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { calcularDiasCobrados, formatCurrency } from "@/lib/calculos";
+import {
+  calcularDiasCobrados,
+  formatCurrency,
+  tipoCobrancaLabel,
+} from "@/lib/calculos";
+import { TipoCobranca } from "@/types";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +22,8 @@ type EquipamentoItem = {
   id: string;
   nome?: string | null;
   valor_diaria?: number | string | null;
+  valor_semanal?: number | string | null;
+  valor_mensal?: number | string | null;
   quantidade_disponivel?: number | null;
   ativo?: boolean | null;
 };
@@ -33,6 +40,7 @@ type ItemLocacaoFormItem = {
   equipamento_nome: string;
   quantidade_locada: number;
   valor_diaria_fechado: number;
+  tipo_cobranca: TipoCobranca;
   data_inicio_cobranca?: string | null;
 };
 
@@ -40,6 +48,7 @@ type ItemLocacaoBanco = {
   equipamento_id: string;
   quantidade_locada: number;
   valor_diaria_fechado?: number | string | null;
+  tipo_cobranca?: TipoCobranca | string | null;
   data_inicio_cobranca?: string | null;
 };
 
@@ -72,6 +81,57 @@ function hojeISO() {
   return new Date().toISOString().split("T")[0];
 }
 
+function normalizarTipo(tipo?: string | null): TipoCobranca {
+  if (tipo === "mensal") return "mensal";
+  return "diaria";
+}
+
+function getValorPorTipo(eq: EquipamentoItem, tipo: TipoCobranca) {
+  if (tipo === "mensal") return Number(eq.valor_mensal || 0);
+  return Number(eq.valor_diaria || 0);
+}
+
+function addMeses(data: string, meses: number) {
+  if (!data) return "";
+
+  const d = new Date(data + "T12:00:00");
+  d.setMonth(d.getMonth() + meses);
+
+  return d.toISOString().split("T")[0];
+}
+
+function calcularMesesEntre(dataInicio?: string | null, dataFim?: string | null) {
+  if (!dataInicio || !dataFim) return 1;
+
+  const inicio = new Date(dataInicio + "T12:00:00");
+  const fim = new Date(dataFim + "T12:00:00");
+
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) {
+    return 1;
+  }
+
+  const meses =
+    (fim.getFullYear() - inicio.getFullYear()) * 12 +
+    (fim.getMonth() - inicio.getMonth());
+
+  return Math.max(1, meses || 1);
+}
+
+function textoPeriodos(
+  dias: number,
+  tipoCobranca: TipoCobranca,
+  semPrevisao: boolean,
+  quantidadeMeses: number
+) {
+  if (semPrevisao) return "Sem previsão";
+
+  if (tipoCobranca === "mensal") {
+    return `${quantidadeMeses} mensalidade${quantidadeMeses === 1 ? "" : "s"}`;
+  }
+
+  return `${dias} diária${dias === 1 ? "" : "s"}`;
+}
+
 export default function EditarLocacaoPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -84,6 +144,7 @@ export default function EditarLocacaoPage() {
   const [originalItens, setOriginalItens] = useState<ItemLocacaoFormItem[]>([]);
   const [dataInicio, setDataInicio] = useState("");
   const [dataPrevisao, setDataPrevisao] = useState("");
+  const [quantidadeMeses, setQuantidadeMeses] = useState(1);
   const [taxaEntrega, setTaxaEntrega] = useState(0);
   const [valorDesconto, setValorDesconto] = useState(0);
   const [valorEntrada, setValorEntrada] = useState(0);
@@ -94,6 +155,10 @@ export default function EditarLocacaoPage() {
   const [loading, setLoading] = useState(true);
   const [locacao, setLocacao] = useState<LocacaoEditItem | null>(null);
 
+  const temMensalidade = useMemo(() => {
+    return itens.some((item) => item.tipo_cobranca === "mensal");
+  }, [itens]);
+
   useEffect(() => {
     if (!id) return;
     void fetchData();
@@ -102,6 +167,12 @@ export default function EditarLocacaoPage() {
       fotosEntrega.forEach((foto) => URL.revokeObjectURL(foto.preview));
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!dataInicio || !temMensalidade) return;
+
+    setDataPrevisao(addMeses(dataInicio, quantidadeMeses));
+  }, [dataInicio, quantidadeMeses, temMensalidade]);
 
   async function fetchData() {
     if (!id) return;
@@ -142,17 +213,20 @@ export default function EditarLocacaoPage() {
         return;
       }
 
-      const loc = l.data as LocacaoEditItem;
-      const listaEquipamentos = ((e.data as EquipamentoItem[]) || []).filter(
+      const loc = l.data as unknown as LocacaoEditItem;
+      const listaEquipamentos = ((e.data as unknown as EquipamentoItem[]) || []).filter(
         Boolean
       );
-      const listaFeriados = ((f.data as DiaNaoCobradoItem[]) || []).filter(
+      const listaFeriados = ((f.data as unknown as DiaNaoCobradoItem[]) || []).filter(
         Boolean
       );
 
       setLocacao(loc);
       setDataInicio(loc.data_inicio || "");
       setDataPrevisao(loc.data_previsao_entrega || "");
+      setQuantidadeMeses(
+        calcularMesesEntre(loc.data_inicio, loc.data_previsao_entrega)
+      );
       setTaxaEntrega(Number(loc.taxa_entrega || 0));
       setValorDesconto(Number(loc.valor_desconto || 0));
       setValorEntrada(Number(loc.valor_total_pago || 0));
@@ -164,19 +238,24 @@ export default function EditarLocacaoPage() {
       const agrupados = new Map<string, ItemLocacaoFormItem>();
 
       for (const i of loc.itens_locacao || []) {
-        const existente = agrupados.get(i.equipamento_id);
-        const nome =
-          listaEquipamentos.find((eq) => eq.id === i.equipamento_id)?.nome ||
-          "Equipamento";
+        const tipo = normalizarTipo(i.tipo_cobranca);
+        const chave = `${i.equipamento_id}-${tipo}`;
+
+        const existente = agrupados.get(chave);
+        const equipamento = listaEquipamentos.find(
+          (eq) => eq.id === i.equipamento_id
+        );
+        const nome = equipamento?.nome || "Equipamento";
 
         if (existente) {
           existente.quantidade_locada += Number(i.quantidade_locada || 0);
         } else {
-          agrupados.set(i.equipamento_id, {
+          agrupados.set(chave, {
             equipamento_id: i.equipamento_id,
             equipamento_nome: nome,
             quantidade_locada: Number(i.quantidade_locada || 0),
             valor_diaria_fechado: Number(i.valor_diaria_fechado || 0),
+            tipo_cobranca: tipo,
             data_inicio_cobranca:
               i.data_inicio_cobranca || loc.data_inicio || "",
           });
@@ -196,12 +275,17 @@ export default function EditarLocacaoPage() {
   }
 
   function addItem(eq: EquipamentoItem) {
+    const tipoPadrao: TipoCobranca = "diaria";
+
     const originalQty =
-      originalItens.find((i) => i.equipamento_id === eq.id)
-        ?.quantidade_locada || 0;
+      originalItens
+        .filter((i) => i.equipamento_id === eq.id)
+        .reduce((acc, i) => acc + Number(i.quantidade_locada || 0), 0) || 0;
 
     const currentInCart =
-      itens.find((i) => i.equipamento_id === eq.id)?.quantidade_locada || 0;
+      itens
+        .filter((i) => i.equipamento_id === eq.id)
+        .reduce((acc, i) => acc + Number(i.quantidade_locada || 0), 0) || 0;
 
     const effectiveAvailable =
       Number(eq.quantidade_disponivel || 0) + originalQty - currentInCart;
@@ -211,12 +295,14 @@ export default function EditarLocacaoPage() {
       return;
     }
 
-    const existing = itens.find((i) => i.equipamento_id === eq.id);
+    const existing = itens.find(
+      (i) => i.equipamento_id === eq.id && i.tipo_cobranca === tipoPadrao
+    );
 
     if (existing) {
       setItens(
         itens.map((i) =>
-          i.equipamento_id === eq.id
+          i.equipamento_id === eq.id && i.tipo_cobranca === tipoPadrao
             ? { ...i, quantidade_locada: i.quantidade_locada + 1 }
             : i
         )
@@ -228,28 +314,49 @@ export default function EditarLocacaoPage() {
           equipamento_id: eq.id,
           equipamento_nome: eq.nome || "Equipamento",
           quantidade_locada: 1,
-          valor_diaria_fechado: Number(eq.valor_diaria || 0),
+          valor_diaria_fechado: getValorPorTipo(eq, tipoPadrao),
+          tipo_cobranca: tipoPadrao,
           data_inicio_cobranca: hojeISO(),
         },
       ]);
     }
   }
 
-  function removeItem(eqId: string) {
-    setItens(itens.filter((i) => i.equipamento_id !== eqId));
+  function removeItem(eqId: string, tipoCobranca: TipoCobranca) {
+    setItens(
+      itens.filter(
+        (i) => !(i.equipamento_id === eqId && i.tipo_cobranca === tipoCobranca)
+      )
+    );
   }
 
-  function updateQty(eqId: string, delta: number) {
+  function updateQty(eqId: string, tipoCobranca: TipoCobranca, delta: number) {
     const eq = equipamentos.find((e) => e.id === eqId);
+
     const originalQty =
-      originalItens.find((i) => i.equipamento_id === eqId)
-        ?.quantidade_locada || 0;
+      originalItens
+        .filter((i) => i.equipamento_id === eqId)
+        .reduce((acc, i) => acc + Number(i.quantidade_locada || 0), 0) || 0;
 
     setItens(
       itens.map((i) => {
-        if (i.equipamento_id !== eqId) return i;
+        if (i.equipamento_id !== eqId || i.tipo_cobranca !== tipoCobranca) {
+          return i;
+        }
 
-        const maxAvail = Number(eq?.quantidade_disponivel || 0) + originalQty;
+        const outrosItensMesmoEquipamento = itens
+          .filter(
+            (outro) =>
+              outro.equipamento_id === eqId &&
+              outro.tipo_cobranca !== tipoCobranca
+          )
+          .reduce((acc, outro) => acc + Number(outro.quantidade_locada || 0), 0);
+
+        const maxAvail =
+          Number(eq?.quantidade_disponivel || 0) +
+          originalQty -
+          outrosItensMesmoEquipamento;
+
         const newQty = Math.max(
           1,
           Math.min(i.quantidade_locada + delta, maxAvail)
@@ -260,12 +367,92 @@ export default function EditarLocacaoPage() {
     );
   }
 
-  function updateDailyPrice(eqId: string, value: string) {
+  function setManualQty(
+    eqId: string,
+    tipoCobranca: TipoCobranca,
+    value: string
+  ) {
+    const eq = equipamentos.find((e) => e.id === eqId);
+    if (!eq) return;
+
+    const originalQty =
+      originalItens
+        .filter((i) => i.equipamento_id === eqId)
+        .reduce((acc, i) => acc + Number(i.quantidade_locada || 0), 0) || 0;
+
+    const outrosItensMesmoEquipamento = itens
+      .filter(
+        (outro) =>
+          outro.equipamento_id === eqId && outro.tipo_cobranca !== tipoCobranca
+      )
+      .reduce((acc, outro) => acc + Number(outro.quantidade_locada || 0), 0);
+
+    const maxAvail =
+      Number(eq.quantidade_disponivel || 0) +
+      originalQty -
+      outrosItensMesmoEquipamento;
+
+    let quantidade = Number(value);
+
+    if (Number.isNaN(quantidade)) return;
+    if (quantidade < 1) quantidade = 1;
+
+    if (quantidade > maxAvail) {
+      quantidade = maxAvail;
+      toast.error("Quantidade acima do estoque disponível");
+    }
+
+    setItens(
+      itens.map((i) =>
+        i.equipamento_id === eqId && i.tipo_cobranca === tipoCobranca
+          ? { ...i, quantidade_locada: quantidade }
+          : i
+      )
+    );
+  }
+
+  function alterarTipoCobranca(
+    eqId: string,
+    tipoAtual: TipoCobranca,
+    novoTipo: TipoCobranca
+  ) {
+    const eq = equipamentos.find((e) => e.id === eqId);
+    const jaExiste = itens.some(
+      (i) => i.equipamento_id === eqId && i.tipo_cobranca === novoTipo
+    );
+
+    if (jaExiste) {
+      toast.error("Esse equipamento já está adicionado com esse tipo de cobrança");
+      return;
+    }
+
+    setItens(
+      itens.map((i) => {
+        if (i.equipamento_id !== eqId || i.tipo_cobranca !== tipoAtual) {
+          return i;
+        }
+
+        return {
+          ...i,
+          tipo_cobranca: novoTipo,
+          valor_diaria_fechado: eq
+            ? getValorPorTipo(eq, novoTipo)
+            : i.valor_diaria_fechado,
+        };
+      })
+    );
+  }
+
+  function updatePrice(
+    eqId: string,
+    tipoCobranca: TipoCobranca,
+    value: string
+  ) {
     const novoValor = Number(value);
 
     setItens(
       itens.map((i) =>
-        i.equipamento_id === eqId
+        i.equipamento_id === eqId && i.tipo_cobranca === tipoCobranca
           ? {
               ...i,
               valor_diaria_fechado: Number.isNaN(novoValor) ? 0 : novoValor,
@@ -350,81 +537,24 @@ export default function EditarLocacaoPage() {
   }, [dataInicio, dataPrevisao, feriados, cobrarDomingo]);
 
   const valorTotal = useMemo(() => {
-    if (!dataPrevisao) {
-      const subtotalSemPrevisao = itens.reduce((soma, item) => {
-        return (
-          soma +
-          Number(item.quantidade_locada || 0) *
-            Number(item.valor_diaria_fechado || 0)
-        );
-      }, 0);
-
-      return subtotalSemPrevisao + taxaEntrega - valorDesconto;
-    }
-
-    const fim = new Date(dataPrevisao + "T12:00:00");
-    const hojeComplemento = hojeISO();
-
     const subtotal = itens.reduce((soma, itemAtual) => {
-      const itemOriginal = originalItens.find(
-        (i) => i.equipamento_id === itemAtual.equipamento_id
-      );
-
       const qtdAtual = Number(itemAtual.quantidade_locada || 0);
-      const qtdOriginal = Number(itemOriginal?.quantidade_locada || 0);
-      const diaria = Number(itemAtual.valor_diaria_fechado || 0);
+      const valorUnitario = Number(itemAtual.valor_diaria_fechado || 0);
 
-      let totalItem = 0;
-
-      const qtdBase = Math.min(qtdAtual, qtdOriginal);
-      if (qtdBase > 0) {
-        const inicioBase = itemOriginal?.data_inicio_cobranca || dataInicio;
-        const diasBase = calcularDiasCobrados(
-          new Date(inicioBase + "T12:00:00"),
-          fim,
-          feriados as never,
-          cobrarDomingo
-        );
-
-        totalItem += qtdBase * diaria * diasBase;
+      if (itemAtual.tipo_cobranca === "mensal") {
+        return soma + qtdAtual * valorUnitario * quantidadeMeses;
       }
 
-      const qtdComplemento = Math.max(qtdAtual - qtdOriginal, 0);
-      if (qtdComplemento > 0) {
-        const diasComplemento = calcularDiasCobrados(
-          new Date(hojeComplemento + "T12:00:00"),
-          fim,
-          feriados as never,
-          cobrarDomingo
-        );
-
-        totalItem += qtdComplemento * diaria * diasComplemento;
-      }
-
-      if (!itemOriginal && qtdAtual > 0) {
-        const diasNovoItem = calcularDiasCobrados(
-          new Date(hojeComplemento + "T12:00:00"),
-          fim,
-          feriados as never,
-          cobrarDomingo
-        );
-
-        totalItem = qtdAtual * diaria * diasNovoItem;
-      }
-
-      return soma + totalItem;
+      return soma + qtdAtual * valorUnitario * diasCobrados;
     }, 0);
 
     return subtotal + taxaEntrega - valorDesconto;
   }, [
     itens,
-    originalItens,
-    dataInicio,
-    dataPrevisao,
+    diasCobrados,
+    quantidadeMeses,
     taxaEntrega,
     valorDesconto,
-    feriados,
-    cobrarDomingo,
   ]);
 
   const saldo = valorTotal - valorEntrada;
@@ -470,24 +600,6 @@ export default function EditarLocacaoPage() {
         return;
       }
 
-      for (const item of originalItens) {
-        const eq = equipamentos.find((e) => e.id === item.equipamento_id);
-        if (!eq) continue;
-
-        const { error } = await supabase
-          .from("equipamentos")
-          .update({
-            quantidade_disponivel:
-              Number(eq.quantidade_disponivel || 0) +
-              Number(item.quantidade_locada || 0),
-          })
-          .eq("id", item.equipamento_id);
-
-        if (error) {
-          console.error("Erro ao restaurar estoque:", error);
-        }
-      }
-
       const { error: deleteItemsError } = await supabase
         .from("itens_locacao")
         .delete()
@@ -503,12 +615,14 @@ export default function EditarLocacaoPage() {
 
       const itensInsert = itens.flatMap((itemAtual) => {
         const itemOriginal = originalItens.find(
-          (i) => i.equipamento_id === itemAtual.equipamento_id
+          (i) =>
+            i.equipamento_id === itemAtual.equipamento_id &&
+            i.tipo_cobranca === itemAtual.tipo_cobranca
         );
 
         const qtdAtual = Number(itemAtual.quantidade_locada || 0);
         const qtdOriginal = Number(itemOriginal?.quantidade_locada || 0);
-        const diaria = Number(itemAtual.valor_diaria_fechado || 0);
+        const valorUnitario = Number(itemAtual.valor_diaria_fechado || 0);
 
         if (!itemOriginal) {
           return [
@@ -516,7 +630,8 @@ export default function EditarLocacaoPage() {
               locacao_id: id,
               equipamento_id: itemAtual.equipamento_id,
               quantidade_locada: qtdAtual,
-              valor_diaria_fechado: diaria,
+              valor_diaria_fechado: valorUnitario,
+              tipo_cobranca: itemAtual.tipo_cobranca || "diaria",
               locadora_id: locadoraId,
               data_inicio_cobranca: hojeAditivo,
             },
@@ -528,6 +643,7 @@ export default function EditarLocacaoPage() {
           equipamento_id: string;
           quantidade_locada: number;
           valor_diaria_fechado: number;
+          tipo_cobranca: TipoCobranca;
           locadora_id: string | null;
           data_inicio_cobranca: string;
         }> = [];
@@ -539,7 +655,8 @@ export default function EditarLocacaoPage() {
             locacao_id: id,
             equipamento_id: itemAtual.equipamento_id,
             quantidade_locada: qtdBase,
-            valor_diaria_fechado: diaria,
+            valor_diaria_fechado: valorUnitario,
+            tipo_cobranca: itemAtual.tipo_cobranca || "diaria",
             locadora_id: locadoraId,
             data_inicio_cobranca:
               itemOriginal.data_inicio_cobranca || dataInicio,
@@ -553,7 +670,8 @@ export default function EditarLocacaoPage() {
             locacao_id: id,
             equipamento_id: itemAtual.equipamento_id,
             quantidade_locada: qtdComplemento,
-            valor_diaria_fechado: diaria,
+            valor_diaria_fechado: valorUnitario,
+            tipo_cobranca: itemAtual.tipo_cobranca || "diaria",
             locadora_id: locadoraId,
             data_inicio_cobranca: hojeAditivo,
           });
@@ -572,24 +690,34 @@ export default function EditarLocacaoPage() {
         return;
       }
 
+      const equipamentosUsados = new Map<string, number>();
+
       for (const item of itens) {
-        const eq = equipamentos.find((e) => e.id === item.equipamento_id);
+        equipamentosUsados.set(
+          item.equipamento_id,
+          (equipamentosUsados.get(item.equipamento_id) || 0) +
+            Number(item.quantidade_locada || 0)
+        );
+      }
+
+      for (const [equipamentoId, qtdAtualTotal] of equipamentosUsados) {
+        const eq = equipamentos.find((e) => e.id === equipamentoId);
         if (!eq) continue;
 
+        const qtdOriginalTotal =
+          originalItens
+            .filter((o) => o.equipamento_id === equipamentoId)
+            .reduce((acc, o) => acc + Number(o.quantidade_locada || 0), 0) || 0;
+
         const restored =
-          Number(eq.quantidade_disponivel || 0) +
-          Number(
-            originalItens.find((o) => o.equipamento_id === item.equipamento_id)
-              ?.quantidade_locada || 0
-          );
+          Number(eq.quantidade_disponivel || 0) + qtdOriginalTotal;
 
         const { error } = await supabase
           .from("equipamentos")
           .update({
-            quantidade_disponivel:
-              restored - Number(item.quantidade_locada || 0),
+            quantidade_disponivel: restored - qtdAtualTotal,
           })
-          .eq("id", item.equipamento_id);
+          .eq("id", equipamentoId);
 
         if (error) {
           console.error("Erro ao atualizar novo estoque:", error);
@@ -653,7 +781,8 @@ export default function EditarLocacaoPage() {
                   {eq.nome || "Equipamento"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(Number(eq.valor_diaria || 0))}/dia •{" "}
+                  Diária: {formatCurrency(Number(eq.valor_diaria || 0))} •{" "}
+                  Mensal: {formatCurrency(Number(eq.valor_mensal || 0))} •{" "}
                   {Number(eq.quantidade_disponivel || 0)} disp.
                 </p>
               </button>
@@ -662,76 +791,154 @@ export default function EditarLocacaoPage() {
 
           {itens.length > 0 && (
             <div className="space-y-3 border-t border-border pt-4">
-              {itens.map((item) => (
-                <div
-                  key={item.equipamento_id}
-                  className="space-y-3 rounded-2xl bg-secondary p-4"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {item.equipamento_nome}
-                      </p>
+              {itens.map((item) => {
+                const diasReferencia = dataPrevisao ? diasCobrados : 0;
+
+                const subtotal =
+                  Number(item.quantidade_locada || 0) *
+                  Number(item.valor_diaria_fechado || 0) *
+                  (item.tipo_cobranca === "mensal"
+                    ? quantidadeMeses
+                    : diasReferencia);
+
+                return (
+                  <div
+                    key={`${item.equipamento_id}-${item.tipo_cobranca}`}
+                    className="space-y-3 rounded-2xl bg-secondary p-4"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {item.equipamento_nome}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {tipoCobrancaLabel(item.tipo_cobranca)} •{" "}
+                          {formatCurrency(Number(item.valor_diaria_fechado || 0))}
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full text-destructive"
+                        onClick={() =>
+                          removeItem(item.equipamento_id, item.tipo_cobranca)
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full text-destructive"
-                      onClick={() => removeItem(item.equipamento_id)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <Label>Tipo de cobrança</Label>
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <Label>Quantidade</Label>
-
-                      <div className="mt-2 flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-full"
-                          onClick={() => updateQty(item.equipamento_id, -1)}
+                        <select
+                          className="mt-2 w-full rounded-[30px] border border-border bg-background px-4 py-2 text-foreground"
+                          value={item.tipo_cobranca || "diaria"}
+                          onChange={(e) =>
+                            alterarTipoCobranca(
+                              item.equipamento_id,
+                              item.tipo_cobranca,
+                              e.target.value as TipoCobranca
+                            )
+                          }
                         >
-                          <Minus className="h-4 w-4" />
-                        </Button>
+                          <option value="diaria">Diária</option>
+                          <option value="mensal">Mensal</option>
+                        </select>
+                      </div>
 
-                        <span className="w-10 text-center font-bold">
-                          {item.quantidade_locada}
-                        </span>
+                      <div>
+                        <Label>Preço fechado</Label>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-full"
-                          onClick={() => updateQty(item.equipamento_id, 1)}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
+                        <Input
+                          className="mt-2 rounded-[30px]"
+                          type="number"
+                          step="0.01"
+                          value={item.valor_diaria_fechado}
+                          onChange={(e) =>
+                            updatePrice(
+                              item.equipamento_id,
+                              item.tipo_cobranca,
+                              e.target.value
+                            )
+                          }
+                        />
+                      </div>
+
+                      <div>
+                        <Label>Quantidade</Label>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-full"
+                            onClick={() =>
+                              updateQty(
+                                item.equipamento_id,
+                                item.tipo_cobranca,
+                                -1
+                              )
+                            }
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+
+                          <Input
+                            type="number"
+                            min={1}
+                            value={item.quantidade_locada}
+                            onChange={(e) =>
+                              setManualQty(
+                                item.equipamento_id,
+                                item.tipo_cobranca,
+                                e.target.value
+                              )
+                            }
+                            className="h-9 w-20 text-center"
+                          />
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-full"
+                            onClick={() =>
+                              updateQty(
+                                item.equipamento_id,
+                                item.tipo_cobranca,
+                                1
+                              )
+                            }
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <Label>Preço da diária</Label>
-
-                      <Input
-                        className="rounded-[30px]"
-                        type="number"
-                        step="0.01"
-                        value={item.valor_diaria_fechado}
-                        onChange={(e) =>
-                          updateDailyPrice(item.equipamento_id, e.target.value)
-                        }
-                      />
+                    <div className="rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground">
+                      Períodos cobrados:{" "}
+                      <span className="font-semibold text-foreground">
+                        {textoPeriodos(
+                          diasReferencia,
+                          item.tipo_cobranca,
+                          !dataPrevisao,
+                          quantidadeMeses
+                        )}
+                      </span>{" "}
+                      • Subtotal:{" "}
+                      <span className="font-semibold text-primary">
+                        {formatCurrency(subtotal)}
+                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -752,15 +959,43 @@ export default function EditarLocacaoPage() {
               />
             </div>
 
-            <div>
-              <Label>Previsão Entrega</Label>
-              <Input
-                className="rounded-[30px]"
-                type="date"
-                value={dataPrevisao}
-                onChange={(e) => setDataPrevisao(e.target.value)}
-              />
-            </div>
+            {temMensalidade ? (
+              <div>
+                <Label>Quantidade de meses</Label>
+                <Input
+                  className="rounded-[30px]"
+                  type="number"
+                  min={1}
+                  value={quantidadeMeses}
+                  onChange={(e) =>
+                    setQuantidadeMeses(Number(e.target.value) || 1)
+                  }
+                />
+              </div>
+            ) : (
+              <div>
+                <Label>Previsão Entrega</Label>
+                <Input
+                  className="rounded-[30px]"
+                  type="date"
+                  value={dataPrevisao}
+                  onChange={(e) => setDataPrevisao(e.target.value)}
+                />
+              </div>
+            )}
+
+            {temMensalidade && dataPrevisao && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm text-muted-foreground">
+                  Vencimento calculado
+                </p>
+                <p className="font-semibold text-foreground">
+                  {new Date(dataPrevisao + "T12:00:00").toLocaleDateString(
+                    "pt-BR"
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -883,9 +1118,24 @@ export default function EditarLocacaoPage() {
           <h2 className="text-lg font-semibold text-foreground">Resumo</h2>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Dias referência</span>
-            <span className="font-medium text-foreground">{diasCobrados}</span>
+            <span className="text-muted-foreground">
+              {temMensalidade ? "Meses cobrados" : "Dias referência"}
+            </span>
+            <span className="font-medium text-foreground">
+              {temMensalidade ? quantidadeMeses : diasCobrados}
+            </span>
           </div>
+
+          {temMensalidade && dataPrevisao && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Vencimento</span>
+              <span className="font-medium text-foreground">
+                {new Date(dataPrevisao + "T12:00:00").toLocaleDateString(
+                  "pt-BR"
+                )}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Valor total</span>
