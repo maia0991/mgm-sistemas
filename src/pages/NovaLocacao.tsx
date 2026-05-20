@@ -63,6 +63,7 @@ export default function NovaLocacaoPage() {
   const [feriados, setFeriados] = useState<DiaNaoCobrado[]>([]);
 
   const [clienteId, setClienteId] = useState("");
+  const [searchCliente, setSearchCliente] = useState("");
   const [itens, setItens] = useState<ItemLocacaoFormCompleto[]>([]);
   const [tipoCobrancaPadrao, setTipoCobrancaPadrao] =
     useState<TipoCobranca>("diaria");
@@ -312,6 +313,24 @@ export default function NovaLocacaoPage() {
       return prev.filter((f) => f.id !== id);
     });
   }
+
+  const clientesFiltrados = useMemo(() => {
+    const termo = searchCliente.toLowerCase().trim();
+
+    if (!termo) return [];
+
+    return clientes.filter((cliente) => {
+      const nome = cliente.nome_completo?.toLowerCase() || "";
+      const cpf = cliente.cpf_cnpj?.toLowerCase() || "";
+      const telefone = cliente.whatsapp?.toLowerCase() || "";
+
+      return (
+        nome.includes(termo) ||
+        cpf.includes(termo) ||
+        telefone.includes(termo)
+      );
+    });
+  }, [clientes, searchCliente]);
 
   const dataPrevisaoCalculada = useMemo(() => {
     if (semPrevisaoDevolucao) return "";
@@ -570,19 +589,72 @@ export default function NovaLocacaoPage() {
           <h2 className="text-lg font-semibold text-foreground">Cliente</h2>
 
           <div className="space-y-2">
-            <Label className="text-foreground">Selecione o cliente</Label>
-            <select
-              className="w-full rounded-[30px] border border-border bg-background px-4 py-2 text-foreground"
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-            >
-              <option value="">Selecione...</option>
-              {clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>
-                  {cliente.nome_completo}
-                </option>
-              ))}
-            </select>
+            <Label className="text-foreground">Pesquisar cliente</Label>
+
+            <Input
+              className="rounded-[30px]"
+              placeholder="Digite nome, CPF/CNPJ ou telefone..."
+              value={
+                clienteId
+                  ? clientes.find((c) => c.id === clienteId)?.nome_completo ||
+                    ""
+                  : searchCliente
+              }
+              onChange={(e) => {
+                setClienteId("");
+                setSearchCliente(e.target.value);
+              }}
+            />
+
+            {!clienteId && searchCliente && (
+              <div className="max-h-60 overflow-auto rounded-2xl border border-border bg-card p-2 shadow-lg">
+                {clientesFiltrados.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">
+                    Nenhum cliente encontrado
+                  </p>
+                ) : (
+                  clientesFiltrados.map((cliente) => (
+                    <button
+                      key={cliente.id}
+                      type="button"
+                      className="w-full rounded-xl px-3 py-3 text-left transition hover:bg-muted"
+                      onClick={() => {
+                        setClienteId(cliente.id);
+                        setSearchCliente("");
+                      }}
+                    >
+                      <div className="font-medium text-foreground">
+                        {cliente.nome_completo}
+                      </div>
+
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {cliente.whatsapp || "Sem telefone"}
+                      </div>
+
+                      {cliente.cpf_cnpj && (
+                        <div className="text-xs text-muted-foreground">
+                          {cliente.cpf_cnpj}
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {clienteId && (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-[30px]"
+                onClick={() => {
+                  setClienteId("");
+                  setSearchCliente("");
+                }}
+              >
+                Trocar cliente
+              </Button>
+            )}
           </div>
         </div>
 
@@ -618,9 +690,7 @@ export default function NovaLocacaoPage() {
 
             {!semPrevisaoDevolucao && tipoCobrancaPadrao === "diaria" && (
               <div>
-                <Label className="text-foreground">
-                  Previsão de devolução
-                </Label>
+                <Label className="text-foreground">Previsão de devolução</Label>
                 <Input
                   className="rounded-[30px]"
                   type="date"

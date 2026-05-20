@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import ThemeToggle from "./ThemeToggle";
+
 import {
   ChevronDown,
   Package,
@@ -268,6 +270,8 @@ export default function Topbar() {
         )}
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}

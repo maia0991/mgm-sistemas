@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+import { ThemeProvider } from "@/components/theme-provider";
+
 // 🔥 FUNÇÃO PARA FORÇAR FAVICON
 function setFavicon(url: string) {
   const link =
@@ -15,7 +17,11 @@ function setFavicon(url: string) {
   document.head.appendChild(link);
 }
 
-// 🔥 DEFINE SUA LOGO AQUI
+// 🔥 DEFINE SUA LOGO
 setFavicon("/favicon-32x32.png");
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ThemeProvider>
+    <App />
+  </ThemeProvider>
+);

@@ -23,13 +23,66 @@ interface ClienteRow {
   created_at?: string;
 }
 
+const estadosBrasil = [
+  { uf: "AC", nome: "Acre" },
+  { uf: "AL", nome: "Alagoas" },
+  { uf: "AP", nome: "Amapá" },
+  { uf: "AM", nome: "Amazonas" },
+  { uf: "BA", nome: "Bahia" },
+  { uf: "CE", nome: "Ceará" },
+  { uf: "DF", nome: "Distrito Federal" },
+  { uf: "ES", nome: "Espírito Santo" },
+  { uf: "GO", nome: "Goiás" },
+  { uf: "MA", nome: "Maranhão" },
+  { uf: "MT", nome: "Mato Grosso" },
+  { uf: "MS", nome: "Mato Grosso do Sul" },
+  { uf: "MG", nome: "Minas Gerais" },
+  { uf: "PA", nome: "Pará" },
+  { uf: "PB", nome: "Paraíba" },
+  { uf: "PR", nome: "Paraná" },
+  { uf: "PE", nome: "Pernambuco" },
+  { uf: "PI", nome: "Piauí" },
+  { uf: "RJ", nome: "Rio de Janeiro" },
+  { uf: "RN", nome: "Rio Grande do Norte" },
+  { uf: "RS", nome: "Rio Grande do Sul" },
+  { uf: "RO", nome: "Rondônia" },
+  { uf: "RR", nome: "Roraima" },
+  { uf: "SC", nome: "Santa Catarina" },
+  { uf: "SP", nome: "São Paulo" },
+  { uf: "SE", nome: "Sergipe" },
+  { uf: "TO", nome: "Tocantins" },
+];
+
 const initialForm = {
   nome_completo: "",
   cpf_cnpj: "",
   whatsapp: "",
-  endereco_obra: "",
+  endereco: "",
+  numero: "",
+  bairro: "",
+  estado: "",
+  cidade: "",
+  complemento: "",
+  cep: "",
+  referencias_comerciais: "",
   notas_observacoes: "",
 };
+
+function montarEnderecoObra(form: typeof initialForm) {
+  return [
+    form.endereco && `Endereço: ${form.endereco}`,
+    form.numero && `Número: ${form.numero}`,
+    form.bairro && `Bairro: ${form.bairro}`,
+    form.estado && `Estado: ${form.estado}`,
+    form.cidade && `Cidade: ${form.cidade}`,
+    form.complemento && `Complemento: ${form.complemento}`,
+    form.cep && `CEP: ${form.cep}`,
+    form.referencias_comerciais &&
+      `Referências comerciais: ${form.referencias_comerciais}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
 
 export default function ClientesPage() {
   const { blockedByBilling } = useBillingAccess();
@@ -44,9 +97,45 @@ export default function ClientesPage() {
   const [editing, setEditing] = useState<ClienteRow | null>(null);
   const [form, setForm] = useState(initialForm);
 
+  const [cidades, setCidades] = useState<string[]>([]);
+  const [loadingCidades, setLoadingCidades] = useState(false);
+
   useEffect(() => {
     void fetchClientes();
   }, []);
+
+  useEffect(() => {
+    async function fetchCidades() {
+      if (!form.estado) {
+        setCidades([]);
+        return;
+      }
+
+      try {
+        setLoadingCidades(true);
+
+        const res = await fetch(
+          `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${form.estado}/municipios`
+        );
+
+        const data = await res.json();
+
+        const nomes = (data || [])
+          .map((cidade: { nome: string }) => cidade.nome)
+          .sort((a: string, b: string) => a.localeCompare(b));
+
+        setCidades(nomes);
+      } catch (error) {
+        console.error("Erro ao carregar cidades:", error);
+        toast.error("Erro ao carregar cidades do estado");
+        setCidades([]);
+      } finally {
+        setLoadingCidades(false);
+      }
+    }
+
+    void fetchCidades();
+  }, [form.estado]);
 
   async function fetchClientes() {
     try {
@@ -80,13 +169,16 @@ export default function ClientesPage() {
 
   function handleEdit(cliente: ClienteRow) {
     setEditing(cliente);
+
     setForm({
+      ...initialForm,
       nome_completo: cliente.nome_completo || "",
       cpf_cnpj: cliente.cpf_cnpj || "",
       whatsapp: cliente.whatsapp || "",
-      endereco_obra: cliente.endereco_obra || "",
+      endereco: cliente.endereco_obra || "",
       notas_observacoes: cliente.notas_observacoes || "",
     });
+
     setOpenModal(true);
   }
 
@@ -112,6 +204,8 @@ export default function ClientesPage() {
       return;
     }
 
+    const enderecoObra = montarEnderecoObra(form);
+
     try {
       setSaving(true);
 
@@ -122,7 +216,7 @@ export default function ClientesPage() {
             nome_completo: form.nome_completo.trim(),
             cpf_cnpj: form.cpf_cnpj.trim() || null,
             whatsapp: form.whatsapp.trim() || null,
-            endereco_obra: form.endereco_obra.trim() || null,
+            endereco_obra: enderecoObra || null,
             notas_observacoes: form.notas_observacoes.trim() || null,
           })
           .eq("id", editing.id);
@@ -139,7 +233,7 @@ export default function ClientesPage() {
           nome_completo: form.nome_completo.trim(),
           cpf_cnpj: form.cpf_cnpj.trim() || null,
           whatsapp: form.whatsapp.trim() || null,
-          endereco_obra: form.endereco_obra.trim() || null,
+          endereco_obra: enderecoObra || null,
           notas_observacoes: form.notas_observacoes.trim() || null,
           ativo: true,
           locadora_id: locadoraId,
@@ -327,7 +421,7 @@ export default function ClientesPage() {
 
         {openModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-lg rounded-[30px] bg-card p-6 shadow-2xl">
+            <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-[30px] bg-card p-6 shadow-2xl">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-foreground">
                   {editing ? "Editar Cliente" : "Novo Cliente"}
@@ -338,57 +432,180 @@ export default function ClientesPage() {
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome completo</Label>
-                  <Input
-                    value={form.nome_completo}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        nome_completo: e.target.value,
-                      }))
-                    }
-                  />
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2 md:col-span-3">
+                    <Label>Nome completo</Label>
+                    <Input
+                      value={form.nome_completo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          nome_completo: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>CPF/CNPJ</Label>
+                    <Input
+                      value={form.cpf_cnpj}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          cpf_cnpj: maskCpfCnpj(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>WhatsApp</Label>
+                    <Input
+                      value={form.whatsapp}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          whatsapp: maskTelefone(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>CEP</Label>
+                    <Input
+                      value={form.cep}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          cep: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>CPF/CNPJ</Label>
-                  <Input
-                    value={form.cpf_cnpj}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        cpf_cnpj: maskCpfCnpj(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
+                <div className="rounded-[24px] border border-border bg-secondary/40 p-4">
+                  <h3 className="mb-4 text-base font-semibold text-foreground">
+                    Endereço da obra
+                  </h3>
 
-                <div className="space-y-2">
-                  <Label>WhatsApp</Label>
-                  <Input
-                    value={form.whatsapp}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        whatsapp: maskTelefone(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="space-y-2 md:col-span-3">
+                      <Label>Endereço</Label>
+                      <Input
+                        value={form.endereco}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            endereco: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label>Endereço da obra</Label>
-                  <Input
-                    value={form.endereco_obra}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        endereco_obra: e.target.value,
-                      }))
-                    }
-                  />
+                    <div className="space-y-2">
+                      <Label>Número</Label>
+                      <Input
+                        value={form.numero}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            numero: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Bairro</Label>
+                      <Input
+                        value={form.bairro}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            bairro: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Estado</Label>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                        value={form.estado}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            estado: e.target.value,
+                            cidade: "",
+                          }))
+                        }
+                      >
+                        <option value="">Selecione...</option>
+                        {estadosBrasil.map((estado) => (
+                          <option key={estado.uf} value={estado.uf}>
+                            {estado.uf} - {estado.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Cidade</Label>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                        value={form.cidade}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            cidade: e.target.value,
+                          }))
+                        }
+                        disabled={!form.estado || loadingCidades}
+                      >
+                        <option value="">
+                          {loadingCidades
+                            ? "Carregando..."
+                            : "Selecione..."}
+                        </option>
+                        {cidades.map((cidade) => (
+                          <option key={cidade} value={cidade}>
+                            {cidade}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-3">
+                      <Label>Complemento</Label>
+                      <Input
+                        value={form.complemento}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            complemento: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-4">
+                      <Label>Referências comerciais</Label>
+                      <Input
+                        value={form.referencias_comerciais}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            referencias_comerciais: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
