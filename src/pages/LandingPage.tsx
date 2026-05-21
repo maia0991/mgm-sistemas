@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   Building2,
   FileText,
@@ -39,6 +40,8 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
+
             <a
               href="https://wa.me/5599984132226"
               target="_blank"

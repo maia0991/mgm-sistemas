@@ -525,7 +525,15 @@ export default function ContratoPage() {
             pelos dias excedentes.
           </p>
 
-          <p>3. Domingos e feriados cadastrados não são cobrados.</p>
+          {locacao.cobrar_domingo ? (
+  <p>
+    3. Os domingos são cobrados normalmente durante o período da locação.
+  </p>
+) : (
+  <p>
+    3. Domingos e feriados cadastrados não são cobrados.
+  </p>
+)}
 
           <p>
             4. Danos, avarias ou perdas dos equipamentos serão cobrados à parte,
