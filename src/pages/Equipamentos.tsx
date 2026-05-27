@@ -10,14 +10,12 @@ import { Plus, Pencil, Ban, CheckCircle, X } from "lucide-react";
 import ActionGuard from "@/components/ActionGuard";
 import { useBillingAccess } from "@/hooks/useBillingAccess";
 import { useAuth } from "@/contexts/AuthContext";
-import { maskMoney, unmaskMoney } from "@/lib/masks";
 
 interface EquipamentoRow {
   id: string;
   nome: string;
   descricao: string | null;
   valor_diaria: number | string;
-  valor_semanal?: number | string | null;
   valor_mensal?: number | string | null;
   quantidade_disponivel: number;
   ativo: boolean;
@@ -27,9 +25,8 @@ interface EquipamentoRow {
 const initialForm = {
   nome: "",
   descricao: "",
-  valor_diaria: "",
-  valor_semanal: "",
-  valor_mensal: "",
+  valor_diaria: "0,00",
+  valor_mensal: "0,00",
   quantidade_disponivel: "1",
 };
 
@@ -44,6 +41,7 @@ export default function EquipamentosPage() {
   const [openModal, setOpenModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EquipamentoRow | null>(null);
+
   const [form, setForm] = useState(initialForm);
 
   useEffect(() => {
@@ -60,23 +58,40 @@ export default function EquipamentosPage() {
         .order("nome");
 
       if (error) {
-        console.error("Erro ao carregar equipamentos:", error);
+        console.error(error);
         toast.error("Erro ao carregar equipamentos");
         return;
       }
 
       setEquipamentos((data as EquipamentoRow[]) || []);
     } catch (error) {
-      console.error("Erro inesperado ao carregar equipamentos:", error);
-      toast.error("Erro inesperado ao carregar equipamentos");
+      console.error(error);
+      toast.error("Erro inesperado");
     } finally {
       setLoading(false);
     }
   }
 
+  function formatMoney(value: any) {
+    const number = Number(value || 0);
+
+    return number.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
   function openCreateModal() {
     setEditing(null);
-    setForm(initialForm);
+
+    setForm({
+      nome: "",
+      descricao: "",
+      valor_diaria: "0,00",
+      valor_mensal: "0,00",
+      quantidade_disponivel: "1",
+    });
+
     setOpenModal(true);
   }
 
@@ -86,10 +101,9 @@ export default function EquipamentosPage() {
     setForm({
       nome: eq.nome || "",
       descricao: eq.descricao || "",
-      valor_diaria: maskMoney(eq.valor_diaria ?? 0),
-      valor_semanal: maskMoney(eq.valor_semanal ?? 0),
-      valor_mensal: maskMoney(eq.valor_mensal ?? 0),
-      quantidade_disponivel: String(eq.quantidade_disponivel ?? 1),
+      valor_diaria: formatMoney(eq.valor_diaria),
+      valor_mensal: formatMoney(eq.valor_mensal),
+      quantidade_disponivel: String(eq.quantidade_disponivel || 1),
     });
 
     setOpenModal(true);
@@ -103,7 +117,7 @@ export default function EquipamentosPage() {
 
   async function handleSave() {
     if (blockedByBilling) {
-      toast.error("Plano vencido. Não é possível salvar equipamentos.");
+      toast.error("Plano vencido.");
       return;
     }
 
@@ -113,39 +127,19 @@ export default function EquipamentosPage() {
     }
 
     if (!form.nome.trim()) {
-      toast.error("Informe o nome do equipamento");
+      toast.error("Informe o nome");
       return;
     }
 
-    const valorDiaria = unmaskMoney(form.valor_diaria || "0");
-    const valorSemanal = unmaskMoney(form.valor_semanal || "0");
-    const valorMensal = unmaskMoney(form.valor_mensal || "0");
+    const valorDiaria = Number(
+      form.valor_diaria.replace(/\./g, "").replace(",", ".")
+    );
+
+    const valorMensal = Number(
+      form.valor_mensal.replace(/\./g, "").replace(",", ".")
+    );
 
     const quantidadeDisponivel = Number(form.quantidade_disponivel);
-
-    if (Number.isNaN(valorDiaria) || valorDiaria < 0) {
-      toast.error("Informe um valor de diária válido");
-      return;
-    }
-
-    if (Number.isNaN(valorSemanal) || valorSemanal < 0) {
-      toast.error("Informe um valor semanal válido");
-      return;
-    }
-
-    if (Number.isNaN(valorMensal) || valorMensal < 0) {
-      toast.error("Informe um valor mensal válido");
-      return;
-    }
-
-    if (
-      Number.isNaN(quantidadeDisponivel) ||
-      quantidadeDisponivel < 0 ||
-      !Number.isInteger(quantidadeDisponivel)
-    ) {
-      toast.error("Informe uma quantidade válida");
-      return;
-    }
 
     try {
       setSaving(true);
@@ -157,19 +151,18 @@ export default function EquipamentosPage() {
             nome: form.nome.trim(),
             descricao: form.descricao.trim() || null,
             valor_diaria: valorDiaria,
-            valor_semanal: valorSemanal,
             valor_mensal: valorMensal,
             quantidade_disponivel: quantidadeDisponivel,
           })
           .eq("id", editing.id);
 
         if (error) {
-          console.error("Erro ao atualizar equipamento:", error);
-          toast.error("Erro ao atualizar equipamento");
+          console.error(error);
+          toast.error("Erro ao atualizar");
           return;
         }
 
-        toast.success("Equipamento atualizado com sucesso!");
+        toast.success("Atualizado com sucesso!");
       } else {
         const { error } = await (supabase as any)
           .from("equipamentos")
@@ -177,7 +170,6 @@ export default function EquipamentosPage() {
             nome: form.nome.trim(),
             descricao: form.descricao.trim() || null,
             valor_diaria: valorDiaria,
-            valor_semanal: valorSemanal,
             valor_mensal: valorMensal,
             quantidade_disponivel: quantidadeDisponivel,
             ativo: true,
@@ -185,69 +177,58 @@ export default function EquipamentosPage() {
           });
 
         if (error) {
-          console.error("Erro ao criar equipamento:", error);
-          toast.error("Erro ao criar equipamento");
+          console.error(error);
+          toast.error("Erro ao cadastrar");
           return;
         }
 
-        toast.success("Equipamento criado com sucesso!");
+        toast.success("Equipamento cadastrado!");
       }
 
       closeModal();
       await fetchEquipamentos();
     } catch (error) {
-      console.error("Erro inesperado ao salvar equipamento:", error);
-      toast.error("Erro inesperado ao salvar equipamento");
+      console.error(error);
+      toast.error("Erro inesperado");
     } finally {
       setSaving(false);
     }
   }
 
   async function toggleAtivo(eq: EquipamentoRow) {
-    if (blockedByBilling) {
-      toast.error("Plano vencido. Não é possível alterar equipamentos.");
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from("equipamentos")
-        .update({ ativo: !eq.ativo })
+        .update({
+          ativo: !eq.ativo,
+        })
         .eq("id", eq.id);
 
       if (error) {
-        console.error("Erro ao alterar status do equipamento:", error);
-        toast.error("Erro ao alterar status do equipamento");
+        console.error(error);
+        toast.error("Erro ao alterar status");
         return;
       }
 
-      toast.success(
-        eq.ativo
-          ? "Equipamento desativado com sucesso!"
-          : "Equipamento ativado com sucesso!"
-      );
-
+      toast.success("Status alterado!");
       await fetchEquipamentos();
     } catch (error) {
-      console.error("Erro inesperado ao alterar status:", error);
-      toast.error("Erro inesperado ao alterar status do equipamento");
+      console.error(error);
+      toast.error("Erro inesperado");
     }
   }
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
 
-    return equipamentos.filter((eq) => {
-      return (
-        eq.nome.toLowerCase().includes(term) ||
-        (eq.descricao || "").toLowerCase().includes(term)
-      );
-    });
+    return equipamentos.filter((eq) =>
+      eq.nome.toLowerCase().includes(term)
+    );
   }, [equipamentos, search]);
 
   return (
     <Layout>
-      <div className="animate-fade-in space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">
@@ -255,12 +236,12 @@ export default function EquipamentosPage() {
             </h1>
 
             <p className="text-muted-foreground">
-              Gerencie os equipamentos da sua locadora
+              Gerencie seus equipamentos
             </p>
           </div>
 
           <ActionGuard fallbackLabel="Cadastro bloqueado">
-            <Button type="button" onClick={openCreateModal}>
+            <Button onClick={openCreateModal}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Equipamento
             </Button>
@@ -284,7 +265,7 @@ export default function EquipamentosPage() {
             {filtered.map((eq) => (
               <div
                 key={eq.id}
-                className="rounded-[30px] border border-border bg-card p-5 transition-all hover:border-primary/30"
+                className="rounded-[30px] border border-border bg-card p-5"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
@@ -309,36 +290,32 @@ export default function EquipamentosPage() {
                     </p>
 
                     <p className="text-sm text-muted-foreground">
-                      Diária: {maskMoney(eq.valor_diaria || 0)} • Mensal:{" "}
-                      {maskMoney(eq.valor_mensal || 0)} • Estoque:{" "}
+                      Diária: R$ {formatMoney(eq.valor_diaria)} • Mensal: R${" "}
+                      {formatMoney(eq.valor_mensal)} • Estoque:{" "}
                       {eq.quantidade_disponivel}
                     </p>
                   </div>
 
                   <div className="flex gap-2">
-                    <ActionGuard fallbackLabel="Edição bloqueada">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => handleEdit(eq)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </ActionGuard>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleEdit(eq)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
 
-                    <ActionGuard fallbackLabel="Alteração bloqueada">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => toggleAtivo(eq)}
-                      >
-                        {eq.ativo ? (
-                          <Ban className="h-4 w-4" />
-                        ) : (
-                          <CheckCircle className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </ActionGuard>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => toggleAtivo(eq)}
+                    >
+                      {eq.ativo ? (
+                        <Ban className="h-4 w-4" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -354,7 +331,7 @@ export default function EquipamentosPage() {
                   {editing ? "Editar Equipamento" : "Novo Equipamento"}
                 </h2>
 
-                <Button type="button" variant="ghost" onClick={closeModal}>
+                <Button variant="ghost" onClick={closeModal}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -388,81 +365,58 @@ export default function EquipamentosPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Valor da Diária</Label>
+                {/* ===== DIÁRIA ===== */}
+                <div className="space-y-2">
+                  <Label>Valor da Diária</Label>
 
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="R$ 0,00"
-                      value={form.valor_diaria}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_diaria: e.target.value,
-                        }))
-                      }
-                      onBlur={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_diaria: maskMoney(
-                            unmaskMoney(prev.valor_diaria || "0")
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0,00"
+                    value={form.valor_diaria}
+                    onChange={(e) => {
+                      const onlyNumbers = e.target.value.replace(/\D/g, "");
 
-                  <div className="space-y-2">
-                    <Label>Valor Semanal</Label>
+                      const value = Number(onlyNumbers) / 100;
 
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="R$ 0,00"
-                      value={form.valor_semanal}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_semanal: e.target.value,
-                        }))
-                      }
-                      onBlur={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_semanal: maskMoney(
-                            unmaskMoney(prev.valor_semanal || "0")
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
+                      const formatted = value.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
 
-                  <div className="space-y-2">
-                    <Label>Valor Mensal</Label>
+                      setForm((prev) => ({
+                        ...prev,
+                        valor_diaria: formatted,
+                      }));
+                    }}
+                  />
+                </div>
 
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="R$ 0,00"
-                      value={form.valor_mensal}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_mensal: e.target.value,
-                        }))
-                      }
-                      onBlur={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          valor_mensal: maskMoney(
-                            unmaskMoney(prev.valor_mensal || "0")
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
+                {/* ===== MENSAL ===== */}
+                <div className="space-y-2">
+                  <Label>Valor Mensal</Label>
+
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0,00"
+                    value={form.valor_mensal}
+                    onChange={(e) => {
+                      const onlyNumbers = e.target.value.replace(/\D/g, "");
+
+                      const value = Number(onlyNumbers) / 100;
+
+                      const formatted = value.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
+
+                      setForm((prev) => ({
+                        ...prev,
+                        valor_mensal: formatted,
+                      }));
+                    }}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -470,7 +424,6 @@ export default function EquipamentosPage() {
 
                   <Input
                     type="number"
-                    step="1"
                     value={form.quantidade_disponivel}
                     onChange={(e) =>
                       setForm((prev) => ({
@@ -482,16 +435,12 @@ export default function EquipamentosPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={closeModal}>
+                  <Button variant="outline" onClick={closeModal}>
                     Cancelar
                   </Button>
 
                   <ActionGuard fallbackLabel="Salvar bloqueado">
-                    <Button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={saving}
-                    >
+                    <Button onClick={handleSave} disabled={saving}>
                       {saving ? "Salvando..." : "Salvar"}
                     </Button>
                   </ActionGuard>
