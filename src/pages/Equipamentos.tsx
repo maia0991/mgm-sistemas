@@ -86,9 +86,9 @@ export default function EquipamentosPage() {
     setForm({
       nome: eq.nome || "",
       descricao: eq.descricao || "",
-      valor_diaria: String(eq.valor_diaria ?? ""),
-      valor_semanal: String(eq.valor_semanal ?? ""),
-      valor_mensal: String(eq.valor_mensal ?? ""),
+      valor_diaria: maskMoney(eq.valor_diaria ?? 0),
+      valor_semanal: maskMoney(eq.valor_semanal ?? 0),
+      valor_mensal: maskMoney(eq.valor_mensal ?? 0),
       quantidade_disponivel: String(eq.quantidade_disponivel ?? 1),
     });
 
@@ -117,9 +117,9 @@ export default function EquipamentosPage() {
       return;
     }
 
-    const valorDiaria = Number(form.valor_diaria || 0);
-    const valorSemanal = Number(form.valor_semanal || 0);
-    const valorMensal = Number(form.valor_mensal || 0);
+    const valorDiaria = unmaskMoney(form.valor_diaria || "0");
+    const valorSemanal = unmaskMoney(form.valor_semanal || "0");
+    const valorMensal = unmaskMoney(form.valor_mensal || "0");
 
     const quantidadeDisponivel = Number(form.quantidade_disponivel);
 
@@ -309,8 +309,7 @@ export default function EquipamentosPage() {
                     </p>
 
                     <p className="text-sm text-muted-foreground">
-                      Diária:{" "}
-                      {maskMoney(eq.valor_diaria || 0)} • Mensal:{" "}
+                      Diária: {maskMoney(eq.valor_diaria || 0)} • Mensal:{" "}
                       {maskMoney(eq.valor_mensal || 0)} • Estoque:{" "}
                       {eq.quantidade_disponivel}
                     </p>
@@ -395,12 +394,20 @@ export default function EquipamentosPage() {
 
                     <Input
                       type="text"
-                      value={maskMoney(form.valor_diaria)}
+                      inputMode="decimal"
+                      placeholder="R$ 0,00"
+                      value={form.valor_diaria}
                       onChange={(e) =>
                         setForm((prev) => ({
                           ...prev,
-                          valor_diaria: String(
-                            unmaskMoney(e.target.value)
+                          valor_diaria: e.target.value,
+                        }))
+                      }
+                      onBlur={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_diaria: maskMoney(
+                            unmaskMoney(prev.valor_diaria || "0")
                           ),
                         }))
                       }
@@ -412,12 +419,20 @@ export default function EquipamentosPage() {
 
                     <Input
                       type="text"
-                      value={maskMoney(form.valor_semanal)}
+                      inputMode="decimal"
+                      placeholder="R$ 0,00"
+                      value={form.valor_semanal}
                       onChange={(e) =>
                         setForm((prev) => ({
                           ...prev,
-                          valor_semanal: String(
-                            unmaskMoney(e.target.value)
+                          valor_semanal: e.target.value,
+                        }))
+                      }
+                      onBlur={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_semanal: maskMoney(
+                            unmaskMoney(prev.valor_semanal || "0")
                           ),
                         }))
                       }
@@ -429,12 +444,20 @@ export default function EquipamentosPage() {
 
                     <Input
                       type="text"
-                      value={maskMoney(form.valor_mensal)}
+                      inputMode="decimal"
+                      placeholder="R$ 0,00"
+                      value={form.valor_mensal}
                       onChange={(e) =>
                         setForm((prev) => ({
                           ...prev,
-                          valor_mensal: String(
-                            unmaskMoney(e.target.value)
+                          valor_mensal: e.target.value,
+                        }))
+                      }
+                      onBlur={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          valor_mensal: maskMoney(
+                            unmaskMoney(prev.valor_mensal || "0")
                           ),
                         }))
                       }
@@ -459,11 +482,7 @@ export default function EquipamentosPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={closeModal}
-                  >
+                  <Button type="button" variant="outline" onClick={closeModal}>
                     Cancelar
                   </Button>
 
