@@ -16,6 +16,7 @@ import {
   LogOut,
   Building2,
   CreditCard,
+  KeyRound, // Adicionado o ícone da chave
 } from "lucide-react";
 
 const locadoraLinks = [
@@ -29,6 +30,7 @@ const locadoraLinks = [
   { to: "/dias-nao-cobrados", label: "Dias Não Cobrados", icon: CalendarOff },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/backup", label: "Backup", icon: HardDrive },
+  { to: "/reset-password", label: "Alterar Senha", icon: KeyRound }, // Adicionado o link da senha
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -36,6 +38,7 @@ const adminLinks = [
   { to: "/admin-dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin-locadoras", label: "Locadoras", icon: Building2 },
   { to: "/admin-pagamentos", label: "Pagamentos", icon: CreditCard },
+  { to: "/reset-password", label: "Alterar Senha", icon: KeyRound }, // Adicionado também no admin se desejar
 ];
 
 export default function Sidebar() {

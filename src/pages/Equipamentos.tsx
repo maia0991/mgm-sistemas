@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Plus, Pencil, Ban, CheckCircle, X } from "lucide-react";
+import { Plus, Pencil, Ban, CheckCircle, X, Clock, Calendar, Wrench, Search, Package, DollarSign, Layers } from "lucide-react";
 import ActionGuard from "@/components/ActionGuard";
 import { useBillingAccess } from "@/hooks/useBillingAccess";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +19,7 @@ interface EquipamentoRow {
   valor_diaria: number | string;
   valor_mensal?: number | string | null;
   quantidade_disponivel: number;
+  cobranha_24h?: boolean;
   ativo: boolean;
   created_at?: string;
 }
@@ -28,6 +30,7 @@ const initialForm = {
   valor_diaria: "0,00",
   valor_mensal: "0,00",
   quantidade_disponivel: "1",
+  cobranha_24h: true,
 };
 
 export default function EquipamentosPage() {
@@ -83,15 +86,7 @@ export default function EquipamentosPage() {
 
   function openCreateModal() {
     setEditing(null);
-
-    setForm({
-      nome: "",
-      descricao: "",
-      valor_diaria: "0,00",
-      valor_mensal: "0,00",
-      quantidade_disponivel: "1",
-    });
-
+    setForm(initialForm);
     setOpenModal(true);
   }
 
@@ -104,6 +99,7 @@ export default function EquipamentosPage() {
       valor_diaria: formatMoney(eq.valor_diaria),
       valor_mensal: formatMoney(eq.valor_mensal),
       quantidade_disponivel: String(eq.quantidade_disponivel || 1),
+      cobranha_24h: eq.cobranha_24h ?? true,
     });
 
     setOpenModal(true);
@@ -127,7 +123,7 @@ export default function EquipamentosPage() {
     }
 
     if (!form.nome.trim()) {
-      toast.error("Informe o nome");
+      toast.error("Informe o nome do equipamento");
       return;
     }
 
@@ -144,16 +140,19 @@ export default function EquipamentosPage() {
     try {
       setSaving(true);
 
+      const payload = {
+        nome: form.nome.trim(),
+        descricao: form.descricao.trim() || null,
+        valor_diaria: valorDiaria,
+        valor_mensal: valorMensal,
+        quantidade_disponivel: quantidadeDisponivel,
+        cobranha_24h: form.cobranha_24h,
+      };
+
       if (editing) {
         const { error } = await (supabase as any)
           .from("equipamentos")
-          .update({
-            nome: form.nome.trim(),
-            descricao: form.descricao.trim() || null,
-            valor_diaria: valorDiaria,
-            valor_mensal: valorMensal,
-            quantidade_disponivel: quantidadeDisponivel,
-          })
+          .update(payload)
           .eq("id", editing.id);
 
         if (error) {
@@ -167,11 +166,7 @@ export default function EquipamentosPage() {
         const { error } = await (supabase as any)
           .from("equipamentos")
           .insert({
-            nome: form.nome.trim(),
-            descricao: form.descricao.trim() || null,
-            valor_diaria: valorDiaria,
-            valor_mensal: valorMensal,
-            quantidade_disponivel: quantidadeDisponivel,
+            ...payload,
             ativo: true,
             locadora_id: locadoraId,
           });
@@ -236,7 +231,7 @@ export default function EquipamentosPage() {
             </h1>
 
             <p className="text-muted-foreground">
-              Gerencie seus equipamentos
+              Gerencie seus equipamentos e modalidades de cobrança
             </p>
           </div>
 
@@ -283,17 +278,31 @@ export default function EquipamentosPage() {
                       >
                         {eq.ativo ? "Ativo" : "Inativo"}
                       </Badge>
+
+                      <Badge variant="outline" className="text-xs gap-1 border-primary/30 text-primary">
+                        {eq.cobranha_24h ? (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            Diária 24h
+                          </>
+                        ) : (
+                          <>
+                            <Calendar className="h-3 w-3" />
+                            Diária Calendário
+                          </>
+                        )}
+                      </Badge>
                     </div>
 
                     <p className="text-sm text-muted-foreground">
                       {eq.descricao || "Sem descrição"}
                     </p>
 
-                    <p className="text-sm text-muted-foreground">
-                      Diária: R$ {formatMoney(eq.valor_diaria)} • Mensal: R${" "}
-                      {formatMoney(eq.valor_mensal)} • Estoque:{" "}
-                      {eq.quantidade_disponivel}
-                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground pt-1">
+                      <span><strong>Diária:</strong> R$ {formatMoney(eq.valor_diaria)}</span>
+                      <span><strong>Mensal:</strong> R$ {formatMoney(eq.valor_mensal)}</span>
+                      <span><strong>Estoque:</strong> {eq.quantidade_disponivel} un</span>
+                    </div>
                   </div>
 
                   <div className="flex gap-2">
@@ -323,129 +332,188 @@ export default function EquipamentosPage() {
           </div>
         )}
 
+        {/* MODAL PROFISSIONAL E DINÂMICO DE CADASTRO / EDIÇÃO */}
         {openModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-lg rounded-[30px] bg-card p-6 shadow-2xl">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-foreground">
-                  {editing ? "Editar Equipamento" : "Novo Equipamento"}
-                </h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-fade-in">
+            <div className="w-full max-w-xl rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              
+              {/* HEADER DO MODAL */}
+              <div className="px-6 py-5 border-b border-border/60 flex items-center justify-between bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Wrench className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground">
+                      {editing ? "Editar Equipamento" : "Novo Equipamento"}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Configure as informações e regras de cobrança
+                    </p>
+                  </div>
+                </div>
 
-                <Button variant="ghost" onClick={closeModal}>
+                <Button variant="ghost" size="icon" onClick={closeModal} className="rounded-xl h-9 w-9 text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome</Label>
+              {/* CORPO DO FORMULÁRIO COM SCROLL */}
+              <div className="p-6 space-y-5 overflow-y-auto">
+                
+                {/* DADOS BÁSICOS */}
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nome do Equipamento *</Label>
+                    <Input
+                      placeholder="Ex: Martelete Demolidor 15kg"
+                      value={form.nome}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          nome: e.target.value,
+                        }))
+                      }
+                      className="h-12 bg-background/80 border-border rounded-xl text-foreground font-medium focus-visible:ring-primary"
+                    />
+                  </div>
 
-                  <Input
-                    value={form.nome}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        nome: e.target.value,
-                      }))
-                    }
-                  />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descrição / Observações</Label>
+                    <Input
+                      placeholder="Ex: Acompanha ponteiro e talhadeira"
+                      value={form.descricao}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          descricao: e.target.value,
+                        }))
+                      }
+                      className="h-12 bg-background/80 border-border rounded-xl text-foreground focus-visible:ring-primary"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-
-                  <Input
-                    value={form.descricao}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        descricao: e.target.value,
-                      }))
-                    }
-                  />
+                {/* MODALIDADE DE COBRANÇA (CARD DESTAQUE) */}
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <Label className="text-sm font-bold text-foreground cursor-pointer">
+                          Cobrança de Diária de 24h
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">
+                          {form.cobranha_24h
+                            ? "Vence em 24h exatas. Atrasos cobram hora proporcional."
+                            : "Marcar se a cobrança for por 24h corridas (ideal para equipamentos elétricos)."}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={form.cobranha_24h}
+                      onCheckedChange={(checked) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          cobranha_24h: checked,
+                        }))
+                      }
+                    />
+                  </div>
                 </div>
 
-                {/* ===== DIÁRIA ===== */}
-                <div className="space-y-2">
-                  <Label>Valor da Diária</Label>
+                {/* VALORES E ESTOQUE (GRID) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Diária (R$)</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0,00"
+                        value={form.valor_diaria}
+                        onChange={(e) => {
+                          const onlyNumbers = e.target.value.replace(/\D/g, "");
+                          const value = Number(onlyNumbers) / 100;
+                          const formatted = value.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          });
 
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="0,00"
-                    value={form.valor_diaria}
-                    onChange={(e) => {
-                      const onlyNumbers = e.target.value.replace(/\D/g, "");
+                          setForm((prev) => ({
+                            ...prev,
+                            valor_diaria: formatted,
+                          }));
+                        }}
+                        className="h-12 pl-9 bg-background/80 border-border rounded-xl font-bold text-foreground focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
 
-                      const value = Number(onlyNumbers) / 100;
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mensal (R$)</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0,00"
+                        value={form.valor_mensal}
+                        onChange={(e) => {
+                          const onlyNumbers = e.target.value.replace(/\D/g, "");
+                          const value = Number(onlyNumbers) / 100;
+                          const formatted = value.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          });
 
-                      const formatted = value.toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      });
+                          setForm((prev) => ({
+                            ...prev,
+                            valor_mensal: formatted,
+                          }));
+                        }}
+                        className="h-12 pl-9 bg-background/80 border-border rounded-xl font-bold text-foreground focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
 
-                      setForm((prev) => ({
-                        ...prev,
-                        valor_diaria: formatted,
-                      }));
-                    }}
-                  />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Estoque</Label>
+                    <div className="relative">
+                      <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        value={form.quantidade_disponivel}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            quantidade_disponivel: e.target.value,
+                          }))
+                        }
+                        className="h-12 pl-9 bg-background/80 border-border rounded-xl font-bold text-foreground focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* ===== MENSAL ===== */}
-                <div className="space-y-2">
-                  <Label>Valor Mensal</Label>
-
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="0,00"
-                    value={form.valor_mensal}
-                    onChange={(e) => {
-                      const onlyNumbers = e.target.value.replace(/\D/g, "");
-
-                      const value = Number(onlyNumbers) / 100;
-
-                      const formatted = value.toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      });
-
-                      setForm((prev) => ({
-                        ...prev,
-                        valor_mensal: formatted,
-                      }));
-                    }}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Quantidade Disponível</Label>
-
-                  <Input
-                    type="number"
-                    value={form.quantidade_disponivel}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        quantidade_disponivel: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={closeModal}>
-                    Cancelar
-                  </Button>
-
-                  <ActionGuard fallbackLabel="Salvar bloqueado">
-                    <Button onClick={handleSave} disabled={saving}>
-                      {saving ? "Salvando..." : "Salvar"}
-                    </Button>
-                  </ActionGuard>
-                </div>
               </div>
+
+              {/* FOOTER DO MODAL */}
+              <div className="px-6 py-4 border-t border-border/60 bg-muted/20 flex items-center justify-end gap-3">
+                <Button variant="outline" onClick={closeModal} className="rounded-xl h-11 px-5 border-border">
+                  Cancelar
+                </Button>
+
+                <ActionGuard fallbackLabel="Salvar bloqueado">
+                  <Button onClick={handleSave} disabled={saving} className="rounded-xl h-11 px-6 shadow-lg shadow-primary/20 font-semibold">
+                    {saving ? "Salvando..." : "Salvar Equipamento"}
+                  </Button>
+                </ActionGuard>
+              </div>
+
             </div>
           </div>
         )}

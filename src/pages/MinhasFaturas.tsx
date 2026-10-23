@@ -97,7 +97,7 @@ export default function MinhasFaturas() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Minhas Faturas</h1>
           <p className="text-muted-foreground">
-            Acompanhe seus pagamentos e regularize sua mensalidade.
+            Ao realizar o pagamento, a liberação da conta acontece automaticamente.
           </p>
         </div>
 

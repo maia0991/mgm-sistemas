@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Printer, ArrowLeft } from "lucide-react";
+import { Printer, ArrowLeft, Receipt, MessageCircle, Image as ImageIcon } from "lucide-react";
 import {
   formatCurrency,
   formatDate,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/calculos";
 import { DiaNaoCobrado } from "@/types";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
 
 interface ClienteComprovante {
   id: string;
@@ -98,6 +99,10 @@ export default function ComprovanteLocacaoPage() {
   const [diasNaoCobrados, setDiasNaoCobrados] = useState<DiaNaoCobrado[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataDevolucaoVisual, setDataDevolucaoVisual] = useState("");
+  const [modoImpressao, setModoImpressao] = useState<"a4" | "termico">("a4");
+  const [gerandoImagem, setGerandoImagem] = useState(false);
+
+  const comprovanteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (id) {
@@ -265,8 +270,60 @@ export default function ComprovanteLocacaoPage() {
   const valorTotal = subtotalItens + taxaEntrega - valorDesconto;
   const saldo = valorTotal - valorPago;
 
-  function handlePrint() {
-    window.print();
+  function handlePrint(tipo: "a4" | "termico") {
+    setModoImpressao(tipo);
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  }
+
+  async function handleBaixarImagem() {
+    if (!comprovanteRef.current) {
+      toast.error("Erro ao localizar comprovante para imagem.");
+      return;
+    }
+
+    try {
+      setGerandoImagem(true);
+      toast.info("Gerando foto do comprovante...");
+
+      const canvas = await html2canvas(comprovanteRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `Comprovante_Locacao_${locacao?.numero_contrato || "MGM"}.png`;
+      link.click();
+
+      toast.success("Foto do comprovante baixada!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao gerar foto do comprovante.");
+    } finally {
+      setGerandoImagem(false);
+    }
+  }
+
+  async function handleEnviarImagemWhatsApp() {
+    await handleBaixarImagem();
+
+    if (!locacao?.clientes?.whatsapp) {
+      toast.error("Cliente não possui número de WhatsApp cadastrado!");
+      return;
+    }
+
+    const numeroLimpo = locacao.clientes.whatsapp.replace(/\D/g, "");
+    const numeroComDDD = numeroLimpo.length <= 11 ? `55${numeroLimpo}` : numeroLimpo;
+    const nomeCliente = locacao.clientes.nome_completo || "Cliente";
+
+    const mensagem = `Olá *${nomeCliente}*, segue a foto do seu comprovante de locação Nº *${locacao.numero_contrato}*.`;
+
+    const url = `https://wa.me/${numeroComDDD}?text=${encodeURIComponent(mensagem)}`;
+    window.open(url, "_blank");
   }
 
   if (loading) {
@@ -287,22 +344,95 @@ export default function ComprovanteLocacaoPage() {
 
   return (
     <div className="min-h-screen space-y-4 bg-slate-50 pb-10">
-      <div className="no-print sticky top-0 z-10 flex justify-center gap-4 border-b bg-white p-4 shadow-sm">
+      <div className="no-print sticky top-0 z-10 flex flex-wrap justify-center gap-3 border-b bg-white p-4 shadow-sm">
         <Button variant="outline" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
 
         <Button
-          onClick={handlePrint}
+          onClick={() => handlePrint("a4")}
           className="bg-primary font-black uppercase tracking-widest text-white hover:bg-primary/90"
         >
           <Printer className="mr-2 h-4 w-4" />
-          Imprimir Comprovante
+          Imprimir A4
+        </Button>
+
+        <Button
+          onClick={() => handlePrint("termico")}
+          className="bg-slate-800 font-black uppercase tracking-widest text-white hover:bg-slate-700"
+        >
+          <Receipt className="mr-2 h-4 w-4" />
+          Térmico (80mm)
+        </Button>
+
+        <Button
+          onClick={handleBaixarImagem}
+          disabled={gerandoImagem}
+          variant="outline"
+          className="border-blue-600 text-blue-600 hover:bg-blue-50 font-black uppercase tracking-widest"
+        >
+          <ImageIcon className="mr-2 h-4 w-4" />
+          {gerandoImagem ? "Gerando..." : "Baixar PNG"}
+        </Button>
+
+        <Button
+          onClick={handleEnviarImagemWhatsApp}
+          className="bg-emerald-600 font-black uppercase tracking-widest text-white hover:bg-emerald-500"
+        >
+          <MessageCircle className="mr-2 h-4 w-4" />
+          Enviar Foto no Zap
         </Button>
       </div>
 
-      <div className="print-contract mx-auto min-h-[297mm] w-[210mm] bg-white px-12 py-10 text-black shadow-lg print:mx-0 print:w-full print:px-8 print:py-6 print:shadow-none">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body {
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          ${modoImpressao === "termico" ? `
+            @page {
+              size: 80mm auto;
+              margin: 0mm;
+            }
+            body {
+              width: 80mm;
+            }
+            .print-a4 {
+              display: none !important;
+            }
+            .print-termico {
+              display: block !important;
+              width: 80mm !important;
+              padding: 5mm !important;
+              margin: 0 !important;
+              box-shadow: none !important;
+            }
+          ` : `
+            @page {
+              size: A4;
+              margin: 10mm;
+            }
+            .print-termico {
+              display: none !important;
+            }
+            .print-a4 {
+              display: block !important;
+            }
+          `}
+        }
+      ` }} />
+
+      {/* FORMATO A4 */}
+      <div
+        ref={comprovanteRef}
+        className={`print-a4 mx-auto min-h-[297mm] w-[210mm] bg-white px-12 py-10 text-black shadow-lg print:mx-0 print:w-full print:px-8 print:py-6 print:shadow-none ${
+          modoImpressao === "termico" ? "hidden" : "block"
+        }`}
+      >
         <div className="mb-6 border-b-2 border-black pb-4 text-center">
           <h2 className="text-2xl font-black uppercase">
             {perfilEmpresa?.nome_empresa || "MGM Sistemas"}
@@ -504,6 +634,63 @@ export default function ComprovanteLocacaoPage() {
 
         <div className="mt-10 border-t border-black pt-4 text-center text-[10px] font-bold uppercase text-gray-500">
           Imperatriz/MA, {new Date().toLocaleDateString("pt-BR")}
+        </div>
+      </div>
+
+      {/* FORMATO TÉRMICO (80mm) */}
+      <div className={`print-termico mx-auto w-[80mm] bg-white p-4 text-black text-xs font-mono shadow-lg ${modoImpressao === "termico" ? "block" : "hidden"}`}>
+        <div className="text-center border-b border-black pb-2 mb-2">
+          <h2 className="font-bold uppercase text-sm">
+            {perfilEmpresa?.nome_empresa || "MGM Sistemas"}
+          </h2>
+          <p className="text-[10px]">{perfilEmpresa?.endereco || ""}</p>
+          <p className="text-[10px]">CNPJ: {perfilEmpresa?.cnpj || "—"}</p>
+          <p className="text-[10px]">TEL: {perfilEmpresa?.telefone || perfilEmpresa?.whatsapp || "—"}</p>
+        </div>
+
+        <div className="text-center border-b border-black pb-2 mb-2">
+          <p className="font-bold uppercase text-sm">COMPROVANTE DE LOCAÇÃO</p>
+          <p className="font-bold text-sm">CONTRATO Nº {locacao.numero_contrato}</p>
+        </div>
+
+        <div className="mb-2 space-y-0.5 text-[11px]">
+          <p><strong>Cliente:</strong> {locacao.clientes?.nome_completo || "—"}</p>
+          <p><strong>Doc:</strong> {locacao.clientes?.cpf_cnpj || "—"}</p>
+          <p><strong>Tel:</strong> {locacao.clientes?.whatsapp || "—"}</p>
+          <p><strong>Saída:</strong> {formatDate(locacao.data_inicio)}</p>
+          <p><strong>Devolução:</strong> {formatDate(dataDevolucaoVisual)}</p>
+        </div>
+
+        <div className="border-t border-b border-black py-1 mb-2">
+          <div className="flex justify-between font-bold text-[10px]">
+            <span>ITEM / QTD</span>
+            <span>SUBTOTAL</span>
+          </div>
+          {itensComNome.map((item, index) => (
+            <div key={index} className="mt-1">
+              <div className="flex justify-between font-semibold uppercase">
+                <span>{item.qtd}x {item.nome}</span>
+                <span>{formatCurrency(item.subtotal)}</span>
+              </div>
+              <div className="text-[9px] text-gray-600">
+                {item.tipo === "mensal" ? `${item.mesesContrato} mês(es)` : `${item.diasItem} diária(s)`} - {formatCurrency(item.valorFechado)} un
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-0.5 text-right text-[11px] mb-3">
+          <p>Subtotal: {formatCurrency(subtotalItens)}</p>
+          {taxaEntrega > 0 && <p>Taxa Entrega: {formatCurrency(taxaEntrega)}</p>}
+          {valorDesconto > 0 && <p>Desconto: -{formatCurrency(valorDesconto)}</p>}
+          <p className="font-bold text-sm">TOTAL: {formatCurrency(valorTotal)}</p>
+          {valorPago > 0 && <p>Entrada: {formatCurrency(valorPago)}</p>}
+          <p className="font-bold text-sm text-blue-700">SALDO: {formatCurrency(saldo)}</p>
+        </div>
+
+        <div className="text-center border-t border-black pt-2 text-[10px]">
+          <p>{new Date().toLocaleDateString("pt-BR")} {new Date().toLocaleTimeString("pt-BR")}</p>
+          <p className="mt-1 font-bold">Obrigado pela preferência!</p>
         </div>
       </div>
     </div>

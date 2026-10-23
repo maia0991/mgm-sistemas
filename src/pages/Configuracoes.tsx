@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { Building2 } from "lucide-react";
+import { Building2, KeyRound } from "lucide-react";
 
 const configSections = [
   {
@@ -8,6 +8,12 @@ const configSections = [
     label: "Perfil da Empresa",
     desc: "CNPJ, endereço, telefone e dados que aparecem no contrato",
     icon: Building2,
+  },
+  {
+    to: "/reset-password",
+    label: "Alterar Senha",
+    desc: "Atualize sua senha de acesso informando a senha antiga",
+    icon: KeyRound,
   },
 ];
 
