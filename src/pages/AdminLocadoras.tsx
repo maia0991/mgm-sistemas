@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  KeyRound,
 } from "lucide-react";
 
 interface Locadora {
@@ -37,11 +38,18 @@ const initialForm = {
   senha: "",
 };
 
+type FiltroStatus = "todos" | "em_dia" | "proximas" | "vencidas" | "bloqueadas" | "bloqueio_parcial";
+
 export default function AdminLocadorasPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const paramFiltro = searchParams.get("filtro");
 
   const [locadoras, setLocadoras] = useState<Locadora[]>([]);
   const [search, setSearch] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>(
+    (paramFiltro as FiltroStatus) || "todos"
+  );
   const [loadingList, setLoadingList] = useState(true);
   const [checkingAccess, setCheckingAccess] = useState(true);
 
@@ -50,9 +58,22 @@ export default function AdminLocadorasPage() {
   const [editing, setEditing] = useState<Locadora | null>(null);
   const [form, setForm] = useState(initialForm);
 
+  // Estados para o modal de redefinir senha da locadora
+  const [openPasswordModal, setOpenPasswordModal] = useState(false);
+  const [locadoraParaSenha, setLocadoraParaSenha] = useState<Locadora | null>(null);
+  const [novaSenhaAdmin, setNovaSenhaAdmin] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
   useEffect(() => {
     void checkAccessAndLoad();
   }, []);
+
+  // Atualiza o filtro se o parâmetro da URL mudar
+  useEffect(() => {
+    if (paramFiltro) {
+      setFiltroStatus(paramFiltro as FiltroStatus);
+    }
+  }, [paramFiltro]);
 
   async function checkAccessAndLoad() {
     try {
@@ -142,6 +163,51 @@ export default function AdminLocadorasPage() {
     setOpenModal(false);
     setEditing(null);
     setForm(initialForm);
+  }
+
+  function openPasswordModalFunc(locadora: Locadora) {
+    setLocadoraParaSenha(locadora);
+    setNovaSenhaAdmin("");
+    setOpenPasswordModal(true);
+  }
+
+  async function alterarSenhaLocadora() {
+    if (!locadoraParaSenha) return;
+    if (!novaSenhaAdmin.trim() || novaSenhaAdmin.trim().length < 6) {
+      toast.error("A nova senha deve ter pelo menos 6 caracteres");
+      return;
+    }
+
+    try {
+      setSavingPassword(true);
+      
+      const { data, error } = await (supabase.rpc as any)(
+        "admin_update_locadora_password",
+        {
+          p_locadora_id: locadoraParaSenha.id,
+          p_new_password: novaSenhaAdmin.trim(),
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success("Senha da locadora alterada com sucesso!");
+      setOpenPasswordModal(false);
+      setLocadoraParaSenha(null);
+      setNovaSenhaAdmin("");
+    } catch (error: any) {
+      console.error("Erro ao alterar senha:", error);
+      toast.error("Erro ao alterar senha da locadora");
+    } finally {
+      setSavingPassword(false);
+    }
   }
 
   async function salvarLocadora() {
@@ -328,9 +394,38 @@ export default function AdminLocadorasPage() {
     }
   }
 
-  const filtered = locadoras.filter((l) =>
-    l.nome.toLowerCase().includes(search.toLowerCase())
-  );
+  // Lógica de cálculo de datas para os filtros
+  const hojeStr = new Date().toISOString().split("T")[0];
+  const hojeDate = new Date(hojeStr);
+
+  const daqui5DiasDate = new Date(hojeDate);
+  daqui5DiasDate.setDate(hojeDate.getDate() + 5);
+  const daqui5DiasStr = daqui5DiasDate.toISOString().split("T")[0];
+
+  const filtered = locadoras.filter((l) => {
+    const matchSearch = l.nome.toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
+
+    const venc = l.data_vencimento;
+
+    if (filtroStatus === "em_dia") {
+      return l.ativo && !l.bloqueio_parcial && (!venc || venc >= hojeStr);
+    }
+    if (filtroStatus === "proximas") {
+      return l.ativo && venc && venc >= hojeStr && venc <= daqui5DiasStr;
+    }
+    if (filtroStatus === "vencidas") {
+      return l.ativo && venc && venc < hojeStr;
+    }
+    if (filtroStatus === "bloqueadas") {
+      return !l.ativo;
+    }
+    if (filtroStatus === "bloqueio_parcial") {
+      return Boolean(l.bloqueio_parcial);
+    }
+
+    return true; // "todos"
+  });
 
   if (checkingAccess) {
     return (
@@ -352,17 +447,70 @@ export default function AdminLocadorasPage() {
           </Button>
         </div>
 
-        <Input
-          placeholder="Buscar..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="space-y-3">
+          <Input
+            placeholder="Buscar por nome..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={filtroStatus === "todos" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("todos")}
+            >
+              Todas ({locadoras.length})
+            </Button>
+            <Button
+              type="button"
+              variant={filtroStatus === "em_dia" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("em_dia")}
+            >
+              Em Dia
+            </Button>
+            <Button
+              type="button"
+              variant={filtroStatus === "proximas" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("proximas")}
+            >
+              Próx. ao Vencimento
+            </Button>
+            <Button
+              type="button"
+              variant={filtroStatus === "vencidas" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("vencidas")}
+            >
+              Vencidas
+            </Button>
+            <Button
+              type="button"
+              variant={filtroStatus === "bloqueadas" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("bloqueadas")}
+            >
+              Bloqueadas
+            </Button>
+            <Button
+              type="button"
+              variant={filtroStatus === "bloqueio_parcial" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFiltroStatus("bloqueio_parcial")}
+            >
+              Bloq. Parcial
+            </Button>
+          </div>
+        </div>
 
         {loadingList ? (
           <p>Carregando...</p>
         ) : filtered.length === 0 ? (
           <p className="text-muted-foreground">
-            Nenhuma locadora encontrada.
+            Nenhuma locadora encontrada com este filtro.
           </p>
         ) : (
           filtered.map((l) => (
@@ -405,6 +553,15 @@ export default function AdminLocadorasPage() {
                     title="Editar"
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => openPasswordModalFunc(l)}
+                    title="Alterar senha"
+                  >
+                    <KeyRound className="h-4 w-4" />
                   </Button>
 
                   <Button
@@ -479,6 +636,7 @@ export default function AdminLocadorasPage() {
           ))
         )}
 
+        {/* Modal de Criar / Editar Locadora */}
         {openModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="w-full max-w-lg rounded-2xl bg-card p-6 shadow-2xl">
@@ -597,6 +755,56 @@ export default function AdminLocadorasPage() {
                     disabled={saving}
                   >
                     {saving ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Alterar Senha da Locadora */}
+        {openPasswordModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold">
+                  Alterar Senha: {locadoraParaSenha?.nome}
+                </h2>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setOpenPasswordModal(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nova Senha</Label>
+                  <Input
+                    type="password"
+                    placeholder="Mínimo de 6 caracteres"
+                    value={novaSenhaAdmin}
+                    onChange={(e) => setNovaSenhaAdmin(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setOpenPasswordModal(false)}
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button
+                    type="button"
+                    onClick={alterarSenhaLocadora}
+                    disabled={savingPassword}
+                  >
+                    {savingPassword ? "Salvando..." : "Atualizar Senha"}
                   </Button>
                 </div>
               </div>
